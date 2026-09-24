@@ -1,12 +1,15 @@
 import express, { Express } from "express";
 import cors from "cors";
 import helmet from "helmet";
+import path from "path";
 import { env } from "./config/env";
 import { authRoutes } from "./routes/authRoutes";
 import { workspaceRoutes } from "./routes/workspaceRoutes";
 import { pageRoutes } from "./routes/pageRoutes";
 import { boardRoutes } from "./routes/boardRoutes";
 import { chatRoutes } from "./routes/chatRoutes";
+import { searchRoutes } from "./routes/searchRoutes";
+import { uploadRoutes } from "./routes/uploadRoutes";
 
 export function createApp(): Express {
   const app = express();
@@ -23,6 +26,9 @@ export function createApp(): Express {
   app.use("/workspaces/:workspaceId/pages", pageRoutes);
   app.use("/workspaces/:workspaceId/boards", boardRoutes);
   app.use("/workspaces/:workspaceId/channels", chatRoutes);
+  app.use("/workspaces/:workspaceId/search", searchRoutes);
+  app.use("/workspaces/:workspaceId/uploads", uploadRoutes);
+  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
   return app;
 }

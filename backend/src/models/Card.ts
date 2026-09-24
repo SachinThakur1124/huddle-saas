@@ -21,4 +21,6 @@ const cardSchema = new Schema<CardDoc>({
   createdAt: { type: Date, default: () => new Date() },
 });
 
+cardSchema.index({ title: "text", description: "text" });
+
 export const Card = model<CardDoc>("Card", cardSchema);

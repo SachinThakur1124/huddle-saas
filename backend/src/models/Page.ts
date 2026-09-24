@@ -19,4 +19,6 @@ const pageSchema = new Schema<PageDoc>({
   updatedAt: { type: Date, default: () => new Date() },
 });
 
+pageSchema.index({ title: "text", contentJson: "text" });
+
 export const Page = model<PageDoc>("Page", pageSchema);

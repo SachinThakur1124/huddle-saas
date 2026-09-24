@@ -8,6 +8,13 @@ let replSet: MongoMemoryReplSet;
 export async function connectTestDb() {
   replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   await mongoose.connect(replSet.getUri(), { dbName: "test" });
+  // Mongoose builds each model's indexes (including text indexes) in the
+  // background on connect; a $text query issued before that finishes fails
+  // with "text index required for $text query". Wait for every registered
+  // model's indexes before returning, so any test can safely run search.
+  await Promise.all(
+    Object.values(mongoose.connection.models).map((m) => m.init()),
+  );
 }
 
 export async function clearTestDb() {

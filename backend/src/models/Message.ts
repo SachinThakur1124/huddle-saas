@@ -17,4 +17,6 @@ const messageSchema = new Schema<MessageDoc>({
   createdAt: { type: Date, default: () => new Date(), index: true },
 });
 
+messageSchema.index({ body: "text" });
+
 export const Message = model<MessageDoc>("Message", messageSchema);
