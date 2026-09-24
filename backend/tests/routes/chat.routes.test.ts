@@ -38,4 +38,44 @@ describe("chat routes", () => {
       .expect(200);
     expect(list.body.messages).toHaveLength(1);
   });
+
+  it("rejects a member of workspace A reading/posting to workspace B's channel via A's URL (IDOR)", async () => {
+    const regA = await request(app)
+      .post("/auth/register")
+      .send({ email: "alice2@x.com", password: "password123", name: "Alice" });
+    const tokenA = regA.body.accessToken as string;
+    const wsA = await request(app)
+      .post("/workspaces")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ name: "WS A" });
+
+    const regB = await request(app)
+      .post("/auth/register")
+      .send({ email: "bob2@x.com", password: "password123", name: "Bob" });
+    const tokenB = regB.body.accessToken as string;
+    const wsB = await request(app)
+      .post("/workspaces")
+      .set("Authorization", `Bearer ${tokenB}`)
+      .send({ name: "WS B" });
+
+    const channelB = await request(app)
+      .post(`/workspaces/${wsB.body._id}/channels`)
+      .set("Authorization", `Bearer ${tokenB}`)
+      .send({ name: "secret" });
+    await request(app)
+      .post(`/workspaces/${wsB.body._id}/channels/${channelB.body._id}/messages`)
+      .set("Authorization", `Bearer ${tokenB}`)
+      .send({ body: "B's private message" });
+
+    await request(app)
+      .get(`/workspaces/${wsA.body._id}/channels/${channelB.body._id}/messages`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .expect(404);
+
+    await request(app)
+      .post(`/workspaces/${wsA.body._id}/channels/${channelB.body._id}/messages`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ body: "injected by alice" })
+      .expect(404);
+  });
 });

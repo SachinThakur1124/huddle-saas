@@ -1,4 +1,5 @@
 import { Response, NextFunction } from "express";
+import { Types } from "mongoose";
 import { AuthedRequest } from "./requireAuth";
 import { Membership } from "../models/Membership";
 import { PermissionCache, ROLE_ORDER, Role } from "../services/permissionCache";
@@ -20,6 +21,9 @@ export function requireRole(minRole: Role) {
     const userId = req.userId!;
     if (!workspaceId) {
       return res.status(400).json({ error: "workspaceId param required" });
+    }
+    if (!Types.ObjectId.isValid(workspaceId)) {
+      return res.status(400).json({ error: "Invalid workspaceId" });
     }
 
     let role = await cache.get(userId, workspaceId);

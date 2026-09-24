@@ -2,11 +2,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireRole, WorkspaceScopedRequest } from "../middleware/requireRole";
+import { validateObjectIdParams } from "../middleware/validateObjectId";
 import { PageService } from "../services/pageService";
 
 export const pageRoutes = Router({ mergeParams: true });
 
 pageRoutes.use(requireAuth, requireRole("viewer"));
+pageRoutes.use("/:pageId", validateObjectIdParams("pageId"));
 
 pageRoutes.get("/", async (req: WorkspaceScopedRequest, res) => {
   const pages = await PageService.listForWorkspace(req.params.workspaceId);

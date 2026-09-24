@@ -1,7 +1,7 @@
-import { Types } from "mongoose";
 import { Page } from "../models/Page";
 import { withTransaction } from "../lib/withTransaction";
 import { AuditService } from "./auditService";
+import { HttpError } from "../lib/httpError";
 
 interface CreateInput {
   title: string;
@@ -11,6 +11,10 @@ interface CreateInput {
 
 export const PageService = {
   async create(workspaceId: string, actorId: string, input: CreateInput) {
+    if (input.parentId) {
+      const parentExists = await Page.exists({ _id: input.parentId, workspaceId });
+      if (!parentExists) throw new HttpError(400, "Invalid parentId");
+    }
     const page = await Page.create({
       workspaceId,
       parentId: input.parentId ?? null,
@@ -36,6 +40,24 @@ export const PageService = {
   },
 
   async update(workspaceId: string, actorId: string, pageId: string, patch: Partial<CreateInput>) {
+    if (patch.parentId) {
+      if (patch.parentId === pageId) {
+        throw new HttpError(400, "A page cannot be its own parent");
+      }
+      let cursor: string | null = patch.parentId;
+      const guard = new Set<string>();
+      while (cursor) {
+        if (cursor === pageId) {
+          throw new HttpError(400, "Cannot set parent to one of this page's own descendants");
+        }
+        if (guard.has(cursor)) break; // defensive: pre-existing bad data, stop walking
+        guard.add(cursor);
+        const parent: { parentId?: import("mongoose").Types.ObjectId | null } | null =
+          await Page.findOne({ _id: cursor, workspaceId }, { parentId: 1 });
+        if (!parent) throw new HttpError(400, "Invalid parentId");
+        cursor = parent.parentId ? parent.parentId.toString() : null;
+      }
+    }
     const page = await Page.findOneAndUpdate(
       { _id: pageId, workspaceId },
       { ...patch, updatedAt: new Date() },
@@ -55,7 +77,15 @@ export const PageService = {
 
   async delete(workspaceId: string, actorId: string, pageId: string) {
     await withTransaction(async (session) => {
-      const ids: Types.ObjectId[] = [new Types.ObjectId(pageId)];
+      // Scope the root to this workspace explicitly — without this, a
+      // valid-looking pageId belonging to a DIFFERENT workspace would still
+      // be deleted, since the cascade below only scopes the *children* it
+      // discovers, not the root itself.
+      const root = await Page.findOne({ _id: pageId, workspaceId }, { _id: 1 }, { session });
+      if (!root) return;
+
+      const ids = [root._id];
+      const visited = new Set([root._id.toString()]);
       let frontier = ids;
       while (frontier.length > 0) {
         const children = await Page.find(
@@ -63,9 +93,12 @@ export const PageService = {
           { _id: 1 },
           { session },
         );
-        const childIds = children.map((c) => c._id);
-        ids.push(...childIds);
-        frontier = childIds;
+        const newChildIds = children
+          .map((c) => c._id)
+          .filter((id) => !visited.has(id.toString()));
+        newChildIds.forEach((id) => visited.add(id.toString()));
+        ids.push(...newChildIds);
+        frontier = newChildIds;
       }
       await Page.deleteMany({ _id: { $in: ids } }, { session });
       await AuditService.record({

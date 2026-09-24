@@ -1,23 +1,36 @@
 import { Channel } from "../models/Channel";
 import { Message } from "../models/Message";
+import { HttpError } from "../lib/httpError";
 
 interface ListOptions {
   limit?: number;
   before?: string; // opaque cursor: the _id of the oldest message already seen
 }
 
+const MAX_LIMIT = 100;
+
 export const ChatService = {
   async createChannel(workspaceId: string, name: string) {
     return Channel.create({ workspaceId, name });
   },
 
-  async postMessage(channelId: string, authorId: string, workspaceId: string, body: string) {
+  async listChannels(workspaceId: string) {
+    return Channel.find({ workspaceId }).sort({ createdAt: 1 });
+  },
+
+  async postMessage(workspaceId: string, channelId: string, authorId: string, body: string) {
+    const channel = await Channel.exists({ _id: channelId, workspaceId });
+    if (!channel) throw new HttpError(404, "Channel not found");
     return Message.create({ channelId, authorId, workspaceId, body });
   },
 
-  async listMessages(channelId: string, options: ListOptions) {
-    const limit = options.limit ?? 25;
-    const query: Record<string, unknown> = { channelId };
+  async listMessages(workspaceId: string, channelId: string, options: ListOptions) {
+    const channel = await Channel.exists({ _id: channelId, workspaceId });
+    if (!channel) throw new HttpError(404, "Channel not found");
+
+    const rawLimit = options.limit ?? 25;
+    const limit = Math.min(Math.max(1, rawLimit), MAX_LIMIT);
+    const query: Record<string, unknown> = { channelId, workspaceId };
     if (options.before) {
       query._id = { $lt: options.before };
     }
