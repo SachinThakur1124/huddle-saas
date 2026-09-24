@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireRole, WorkspaceScopedRequest } from "../middleware/requireRole";
+import { validateObjectIdParams } from "../middleware/validateObjectId";
 import { Attachment } from "../models/Attachment";
 
 export const uploadRoutes = Router({ mergeParams: true });
@@ -41,9 +42,27 @@ uploadRoutes.post("/", (req: WorkspaceScopedRequest, res) => {
 
     res.status(201).json({
       id: attachment._id,
-      url: `/uploads/${path.basename(req.file.path)}`,
+      // Authenticated download route, not a static file path — anyone
+      // with this URL still needs a valid token AND membership in the
+      // workspace the attachment belongs to (see the GET handler below).
+      url: `/workspaces/${req.params.workspaceId}/uploads/${attachment._id}`,
       mimeType: attachment.mimeType,
       size: attachment.size,
     });
   });
 });
+
+uploadRoutes.get(
+  "/:attachmentId",
+  validateObjectIdParams("attachmentId"),
+  async (req: WorkspaceScopedRequest, res) => {
+    const attachment = await Attachment.findOne({
+      _id: req.params.attachmentId,
+      workspaceId: req.params.workspaceId,
+    });
+    if (!attachment) return res.status(404).json({ error: "Attachment not found" });
+
+    res.type(attachment.mimeType);
+    res.sendFile(path.resolve(attachment.path));
+  },
+);
