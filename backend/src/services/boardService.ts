@@ -75,13 +75,20 @@ export const BoardService = {
   },
 
   /**
-   * Moves a card to (toListId, toPosition) and shifts every sibling at or
-   * after that position up by one, inside a single transaction. The target
-   * list document is written first (version bump) purely to force a real
-   * write conflict between two transactions racing to move different
-   * cards into the same list — without it, two moves that don't happen to
-   * overlap an existing sibling's position can commit independently and
-   * leave duplicate positions.
+   * Moves a card to (toListId, toPosition), keeping positions DENSE
+   * (0..n-1, no gaps) in both the source and target list — the frontend's
+   * drag-and-drop sends a visual index, which only lands in the right slot
+   * if positions never drift from that invariant. The algorithm:
+   *   1. Close the gap in the source list (decrement everyone after the
+   *      card's old position).
+   *   2. Open a slot in the target list at the clamped position (increment
+   *      everyone at or after it, excluding the card itself).
+   *   3. Write the card's new listId/position.
+   * Steps 1 and 2 both correctly apply when fromList === toList, since
+   * they run sequentially inside one transaction against the same
+   * collection. Both the target (and source, if different) List documents
+   * are bumped first purely to force a real write conflict between two
+   * transactions racing to restructure the same list.
    */
   async moveCard(
     workspaceId: string,
@@ -101,11 +108,31 @@ export const BoardService = {
       );
       if (!targetList) throw new HttpError(404, "Target list not found");
 
-      const siblingCount = await Card.countDocuments({ listId: toListId }, { session });
-      const clampedPosition = Math.max(0, Math.min(toPosition, siblingCount));
+      const fromListId = card.listId.toString();
+      const fromPosition = card.position;
+
+      if (fromListId !== toListId) {
+        await List.updateOne({ _id: fromListId }, { $inc: { version: 1 } }, { session });
+      }
+
+      const targetCountExcludingSelf = await Card.countDocuments(
+        { listId: toListId, _id: { $ne: card._id } },
+        { session },
+      );
+      const clampedPosition = Math.max(0, Math.min(toPosition, targetCountExcludingSelf));
 
       await Card.updateMany(
-        { listId: toListId, position: { $gte: clampedPosition } },
+        { listId: fromListId, position: { $gt: fromPosition } },
+        { $inc: { position: -1 } },
+        { session },
+      );
+
+      await Card.updateMany(
+        {
+          listId: toListId,
+          _id: { $ne: card._id },
+          position: { $gte: clampedPosition },
+        },
         { $inc: { position: 1 } },
         { session },
       );

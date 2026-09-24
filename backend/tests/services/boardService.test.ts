@@ -92,6 +92,34 @@ describe("BoardService", () => {
     expect(new Set(positions).size).toBe(positions.length);
   });
 
+  it("keeps positions dense (0..n-1, no gaps) after moving a card out of a list", async () => {
+    const { listA, listB, card } = await setupBoard(); // listA: [card@0]
+    const card2 = await BoardService.createCard(workspaceId, actorId, listA._id.toString(), "B");
+    const card3 = await BoardService.createCard(workspaceId, actorId, listA._id.toString(), "C");
+    // listA is now [card@0, card2@1, card3@2]. Move the middle card out.
+    await BoardService.moveCard(workspaceId, actorId, card2._id.toString(), listB._id.toString(), 0);
+
+    const remaining = await Card.find({ listId: listA._id }).sort({ position: 1 });
+    expect(remaining.map((c) => c.position)).toEqual([0, 1]); // no gap left at the old position 1
+    expect(remaining.map((c) => c._id.toString())).toEqual([card._id.toString(), card3._id.toString()]);
+  });
+
+  it("moving a card down within the same list actually changes its order", async () => {
+    const { listA, card } = await setupBoard(); // listA: [card@0]
+    const card2 = await BoardService.createCard(workspaceId, actorId, listA._id.toString(), "B");
+    const card3 = await BoardService.createCard(workspaceId, actorId, listA._id.toString(), "C");
+    // [card@0, card2@1, card3@2] — move `card` from 0 down to 2 (past both siblings).
+    await BoardService.moveCard(workspaceId, actorId, card._id.toString(), listA._id.toString(), 2);
+
+    const ordered = await Card.find({ listId: listA._id }).sort({ position: 1 });
+    expect(ordered.map((c) => c._id.toString())).toEqual([
+      card2._id.toString(),
+      card3._id.toString(),
+      card._id.toString(),
+    ]);
+    expect(ordered.map((c) => c.position)).toEqual([0, 1, 2]);
+  });
+
   it("returns per-list card counts via aggregation, including empty lists", async () => {
     const { board } = await setupBoard();
     const stats = await BoardService.getStats(workspaceId, board._id.toString());
