@@ -6,6 +6,7 @@ import { authRoutes } from "./routes/authRoutes";
 import { workspaceRoutes } from "./routes/workspaceRoutes";
 import { pageRoutes } from "./routes/pageRoutes";
 import { boardRoutes } from "./routes/boardRoutes";
+import { chatRoutes } from "./routes/chatRoutes";
 
 export function createApp(): Express {
   const app = express();
@@ -21,6 +22,7 @@ export function createApp(): Express {
   app.use("/workspaces", workspaceRoutes);
   app.use("/workspaces/:workspaceId/pages", pageRoutes);
   app.use("/workspaces/:workspaceId/boards", boardRoutes);
+  app.use("/workspaces/:workspaceId/channels", chatRoutes);
 
   return app;
 }
