@@ -2,7 +2,6 @@ import "express-async-errors";
 import express, { Express } from "express";
 import cors from "cors";
 import helmet from "helmet";
-import path from "path";
 import swaggerUi from "swagger-ui-express";
 import pinoHttp from "pino-http";
 import { env } from "./config/env";
@@ -16,6 +15,8 @@ import { boardRoutes } from "./routes/boardRoutes";
 import { chatRoutes } from "./routes/chatRoutes";
 import { searchRoutes } from "./routes/searchRoutes";
 import { uploadRoutes } from "./routes/uploadRoutes";
+import { auditLogRoutes } from "./routes/auditLogRoutes";
+import { activityRoutes } from "./routes/activityRoutes";
 
 export function createApp(): Express {
   const app = express();
@@ -42,8 +43,9 @@ export function createApp(): Express {
   app.use("/workspaces/:workspaceId/boards", boardRoutes);
   app.use("/workspaces/:workspaceId/channels", chatRoutes);
   app.use("/workspaces/:workspaceId/search", searchRoutes);
+  app.use("/workspaces/:workspaceId/audit-log", auditLogRoutes);
+  app.use("/workspaces/:workspaceId/activity", activityRoutes);
   app.use("/workspaces/:workspaceId/uploads", uploadRoutes);
-  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
   app.use(errorHandler);
 
