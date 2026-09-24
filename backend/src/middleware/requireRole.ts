@@ -32,7 +32,7 @@ export function requireRole(minRole: Role) {
     try {
       role = await cache.get(userId, workspaceId);
     } catch {
-      role = null;
+      // fall through to the Mongo lookup below; role stays null
     }
 
     if (!role) {

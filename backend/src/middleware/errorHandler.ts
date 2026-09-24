@@ -11,7 +11,6 @@ function resolveStatus(err: Error & { name?: string; status?: number; statusCode
   return 500;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction) {
   const status = resolveStatus(err);
   if (status >= 500) {
