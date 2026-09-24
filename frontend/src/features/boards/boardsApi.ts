@@ -74,19 +74,39 @@ export const boardsApi = api.injectEndpoints({
         { workspaceId, boardId, cardId, toListId, toPosition },
         { dispatch, queryFulfilled },
       ) {
+        // Mirrors the backend's dense-renumbering algorithm exactly (see
+        // boardService.moveCard) so the optimistic UI doesn't show
+        // duplicate/gapped positions for siblings for the ~request-latency
+        // window before the real response lands.
         const patch = dispatch(
           boardsApi.util.updateQueryData("getBoard", { workspaceId, boardId }, (draft) => {
             const card = draft.cards.find((c) => c._id === cardId);
-            if (card) {
-              card.listId = toListId;
-              card.position = toPosition;
+            if (!card) return;
+            const fromListId = card.listId;
+            const fromPosition = card.position;
+
+            for (const c of draft.cards) {
+              if (c._id === cardId) continue;
+              if (c.listId === fromListId && c.position > fromPosition) {
+                c.position -= 1;
+              }
+              if (c.listId === toListId && c.position >= toPosition) {
+                c.position += 1;
+              }
             }
+            card.listId = toListId;
+            card.position = toPosition;
           }),
         );
         try {
           await queryFulfilled;
         } catch {
           patch.undo();
+        } finally {
+          // Safety net: if the optimistic reorder above ever drifts from
+          // what the server actually computed (e.g. a concurrent move by
+          // another user landed in between), refetch to self-heal.
+          dispatch(boardsApi.util.invalidateTags([{ type: "Board", id: "CURRENT" }]));
         }
       },
     }),

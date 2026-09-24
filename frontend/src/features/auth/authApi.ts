@@ -24,6 +24,9 @@ export const authApi = api.injectEndpoints({
     logout: builder.mutation<void, { refreshToken: string }>({
       query: (body) => ({ url: "/auth/logout", method: "POST", body }),
     }),
+    me: builder.query<PublicUser, void>({
+      query: () => "/auth/me",
+    }),
   }),
 });
 
@@ -32,4 +35,5 @@ export const {
   useLoginMutation,
   useRefreshMutation,
   useLogoutMutation,
+  useMeQuery,
 } = authApi;

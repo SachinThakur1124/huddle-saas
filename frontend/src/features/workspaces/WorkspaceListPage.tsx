@@ -6,14 +6,20 @@ export function WorkspaceListPage() {
   const { data: workspaces = [], isLoading } = useListWorkspacesQuery();
   const [createWorkspace, { isLoading: isCreating }] = useCreateWorkspaceMutation();
   const [name, setName] = useState("");
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    const workspace = await createWorkspace({ name }).unwrap();
-    setName("");
-    navigate(`/workspaces/${workspace._id}/pages`);
+    setError("");
+    try {
+      const workspace = await createWorkspace({ name }).unwrap();
+      setName("");
+      navigate(`/workspaces/${workspace._id}/pages`);
+    } catch {
+      setError("Couldn't create the workspace. Try again.");
+    }
   }
 
   return (
@@ -48,6 +54,7 @@ export function WorkspaceListPage() {
           <button className="btn" type="submit" disabled={isCreating}>
             Create workspace
           </button>
+          {error && <p className="field-error">{error}</p>}
         </form>
       </div>
     </div>

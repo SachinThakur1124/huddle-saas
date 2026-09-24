@@ -17,4 +17,11 @@ describe("authSlice", () => {
     expect(loggedOut.refreshToken).toBeNull();
     expect(loggedOut.user).toBeNull();
   });
+
+  it("login/logout both settle status to ready", () => {
+    const loggedIn = authReducer(undefined, setCredentials({ user, accessToken: "a", refreshToken: "r" }));
+    expect(loggedIn.status).toBe("ready");
+    const loggedOut = authReducer(loggedIn, clearCredentials());
+    expect(loggedOut.status).toBe("ready");
+  });
 });

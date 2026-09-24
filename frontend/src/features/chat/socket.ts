@@ -1,29 +1,48 @@
 import { io, Socket } from "socket.io-client";
-import type { AppDispatch, RootState } from "../../app/store";
+import type { AppDispatch } from "../../app/store";
 import { chatApi } from "./chatApi";
 import { boardsApi } from "../boards/boardsApi";
 
 let socket: Socket | null = null;
-let joinedWorkspaceId: string | null = null;
+let currentToken: string | null = null;
+let currentWorkspaceId: string | null = null;
 
 const SOCKET_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
-export function connectSocket(store: { dispatch: AppDispatch; getState: () => RootState }) {
-  const accessToken = store.getState().auth.accessToken;
-  if (!accessToken) return;
+export function connectSocket(dispatch: AppDispatch, accessToken: string) {
+  // Only (re)connect when the token actually changes — callers that fire
+  // on every store update would otherwise tear down and reopen the
+  // socket on every unrelated Redux action, and workspace:join would
+  // never survive past the first one.
+  if (socket && currentToken === accessToken) return;
 
-  if (socket) socket.disconnect();
+  socket?.disconnect();
+  currentToken = accessToken;
 
   socket = io(SOCKET_URL, { auth: { token: accessToken }, transports: ["websocket"] });
+
+  // Re-join on every connect, not just the first — this is what makes
+  // reconnects (network blips, server restarts) actually resume realtime
+  // instead of silently going quiet in the joined room.
+  socket.on("connect", () => {
+    if (currentWorkspaceId) socket?.emit("workspace:join", currentWorkspaceId);
+  });
 
   socket.on(
     "message:new",
     (message: { _id: string; channelId: string; authorId: string; body: string; createdAt: string }) => {
-      store.dispatch(
+      dispatch(
         chatApi.util.updateQueryData(
           "listMessages",
-          { workspaceId: joinedWorkspaceId ?? "", channelId: message.channelId },
+          { workspaceId: currentWorkspaceId ?? "", channelId: message.channelId },
           (draft) => {
+            // Drop the optimistic placeholder for a message we just sent
+            // ourselves, and never append the same server message twice.
+            const optimisticIndex = draft.messages.findIndex(
+              (m) => m._id.startsWith("optimistic-") && m.body === message.body && m.channelId === message.channelId,
+            );
+            if (optimisticIndex !== -1) draft.messages.splice(optimisticIndex, 1);
+            if (draft.messages.some((m) => m._id === message._id)) return;
             draft.messages.push(message);
           },
         ),
@@ -31,24 +50,19 @@ export function connectSocket(store: { dispatch: AppDispatch; getState: () => Ro
     },
   );
 
-  socket.on(
-    "card:moved",
-    (payload: { cardId: string; toListId: string; toPosition: number }) => {
-      store.dispatch(
-        boardsApi.util.invalidateTags([{ type: "Board", id: "CURRENT" }]),
-      );
-      void payload; // full optimistic patch on the remote event is out of scope for today
-    },
-  );
+  socket.on("card:moved", () => {
+    dispatch(boardsApi.util.invalidateTags([{ type: "Board", id: "CURRENT" }]));
+  });
 }
 
 export function joinWorkspace(workspaceId: string) {
-  joinedWorkspaceId = workspaceId;
+  currentWorkspaceId = workspaceId;
   socket?.emit("workspace:join", workspaceId);
 }
 
 export function disconnectSocket() {
   socket?.disconnect();
   socket = null;
-  joinedWorkspaceId = null;
+  currentToken = null;
+  currentWorkspaceId = null;
 }

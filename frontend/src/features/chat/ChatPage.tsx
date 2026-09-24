@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useListMessagesQuery, useSendMessageMutation } from "./chatApi";
-import { joinWorkspace } from "./socket";
 import { selectCurrentUser } from "../auth/authSlice";
+import { enqueue } from "../../app/offlineQueue";
+
+function isNetworkError(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "status" in err && err.status === "FETCH_ERROR";
+}
 
 export function ChatPage() {
   const { workspaceId = "", channelId = "" } = useParams();
@@ -18,8 +22,12 @@ export function ChatPage() {
   const hasScrolledInitially = useRef(false);
 
   useEffect(() => {
-    joinWorkspace(workspaceId);
-  }, [workspaceId]);
+    // Switching channels resets pagination and the one-time initial
+    // scroll-to-bottom — without this, reopening a different channel
+    // would keep an old `before` cursor and never re-scroll down.
+    setBefore(undefined);
+    hasScrolledInitially.current = false;
+  }, [channelId]);
 
   useEffect(() => {
     // Infinite scroll: when the sentinel above the oldest message scrolls
@@ -50,7 +58,18 @@ export function ChatPage() {
     if (!draft.trim()) return;
     const body = draft;
     setDraft("");
-    await sendMessage({ workspaceId, channelId, body });
+    try {
+      await sendMessage({ workspaceId, channelId, body }).unwrap();
+    } catch (err) {
+      if (isNetworkError(err)) {
+        // Offline: queue it in IndexedDB rather than losing the draft —
+        // flushed automatically on the browser's `online` event (see
+        // main.tsx).
+        await enqueue({ id: `${Date.now()}-${Math.random()}`, workspaceId, channelId, body });
+        return;
+      }
+      setDraft(body); // give the text back so it isn't silently lost
+    }
   }
 
   return (

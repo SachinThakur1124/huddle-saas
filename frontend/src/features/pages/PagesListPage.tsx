@@ -7,14 +7,20 @@ export function PagesListPage() {
   const { data: pages = [], isLoading } = useListPagesQuery({ workspaceId });
   const [createPage, { isLoading: isCreating }] = useCreatePageMutation();
   const [title, setTitle] = useState("");
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    const page = await createPage({ workspaceId, title }).unwrap();
-    setTitle("");
-    navigate(`/workspaces/${workspaceId}/pages/${page._id}`);
+    setError("");
+    try {
+      const page = await createPage({ workspaceId, title }).unwrap();
+      setTitle("");
+      navigate(`/workspaces/${workspaceId}/pages/${page._id}`);
+    } catch {
+      setError("Couldn't create the page. Check your permissions and try again.");
+    }
   }
 
   return (
@@ -32,6 +38,7 @@ export function PagesListPage() {
           + New page
         </button>
       </form>
+      {error && <p className="field-error">{error}</p>}
       {isLoading && <p>Loading...</p>}
       <div style={{ display: "grid", gap: "0.6rem" }}>
         {pages.map((p) => (

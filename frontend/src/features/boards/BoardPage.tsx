@@ -75,14 +75,17 @@ function ListColumn({
 
 export function BoardPage() {
   const { workspaceId = "", boardId = "" } = useParams();
-  const { data } = useGetBoardQuery({ workspaceId, boardId });
+  const { data, isError, isLoading } = useGetBoardQuery({ workspaceId, boardId });
   const [createList] = useCreateListMutation();
   const [createCard] = useCreateCardMutation();
   const [moveCard] = useMoveCardMutation();
   const [newListTitle, setNewListTitle] = useState("");
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  if (!data) return <p>Loading...</p>;
+  if (isLoading) return <p>Loading...</p>;
+  if (isError || !data) {
+    return <p className="field-error">This board doesn't exist or you don't have access to it.</p>;
+  }
   const { lists, cards } = data;
 
   function cardsFor(listId: string) {
@@ -91,7 +94,7 @@ export function BoardPage() {
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    if (!over) return;
+    if (!over || over.id === active.id) return;
     const activeCard = cards.find((c) => c._id === active.id);
     if (!activeCard) return;
 
@@ -115,15 +118,23 @@ export function BoardPage() {
   async function handleAddCard(listId: string) {
     const title = window.prompt("Card title");
     if (title?.trim()) {
-      await createCard({ workspaceId, boardId, listId, title }).unwrap();
+      try {
+        await createCard({ workspaceId, boardId, listId, title }).unwrap();
+      } catch {
+        window.alert("Couldn't create the card. Check your permissions and try again.");
+      }
     }
   }
 
   async function handleAddList(e: React.FormEvent) {
     e.preventDefault();
     if (!newListTitle.trim()) return;
-    await createList({ workspaceId, boardId, title: newListTitle }).unwrap();
-    setNewListTitle("");
+    try {
+      await createList({ workspaceId, boardId, title: newListTitle }).unwrap();
+      setNewListTitle("");
+    } catch {
+      window.alert("Couldn't create the list. Check your permissions and try again.");
+    }
   }
 
   return (

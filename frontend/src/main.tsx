@@ -1,54 +1,95 @@
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { Provider, useDispatch } from "react-redux";
+import { Provider, useDispatch, useSelector } from "react-redux";
 import { BrowserRouter } from "react-router-dom";
-import { store, AppDispatch } from "./app/store";
+import { store, AppDispatch, RootState } from "./app/store";
 import { applyTheme, getPreferredTheme } from "./app/theme";
-import { setCredentials } from "./features/auth/authSlice";
+import { setCredentials, clearCredentials, selectAccessToken } from "./features/auth/authSlice";
 import { authApi } from "./features/auth/authApi";
 import { connectSocket, disconnectSocket } from "./features/chat/socket";
+import { chatApi } from "./features/chat/chatApi";
+import { flushQueue } from "./app/offlineQueue";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { App } from "./App";
 import "./index.css";
 
 applyTheme(getPreferredTheme());
 
-function SilentRefreshAndSocket() {
-  const dispatch = useDispatch<AppDispatch>();
+// Module-level (not component-state) so React StrictMode's deliberate
+// double-invoke of effects in dev — and any accidental remount — can only
+// ever trigger ONE real /auth/refresh call. Redeeming the same refresh
+// token twice in parallel trips the backend's reuse-detection and revokes
+// the whole token family (see authService.ts refresh()).
+let bootstrapPromise: Promise<void> | null = null;
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const state = store.getState();
-      if (state.auth.accessToken || !state.auth.refreshToken) return;
+function bootstrapAuth(dispatch: AppDispatch, getState: () => RootState) {
+  if (!bootstrapPromise) {
+    bootstrapPromise = (async () => {
+      const { refreshToken } = getState().auth;
+      if (!refreshToken) {
+        dispatch(clearCredentials());
+        return;
+      }
       try {
         const result = await dispatch(
-          authApi.endpoints.refresh.initiate({ refreshToken: state.auth.refreshToken }),
+          authApi.endpoints.refresh.initiate({ refreshToken }),
         ).unwrap();
-        if (cancelled) return;
+        // Apply the new token pair BEFORE fetching /auth/me — api.ts reads
+        // state.auth.accessToken for the Authorization header, and the old
+        // refresh token has already been rotated/revoked server-side by
+        // the call above, so anything that reads state.auth before this
+        // dispatch would still see the stale (now-dead) refresh token.
         dispatch(
           setCredentials({
-            user: state.auth.user ?? { id: "", email: "", name: "" },
+            user: getState().auth.user ?? { id: "", email: "", name: "" },
             accessToken: result.accessToken,
             refreshToken: result.refreshToken,
           }),
         );
+        const user = await dispatch(authApi.endpoints.me.initiate(undefined, { forceRefetch: true }))
+          .unwrap()
+          .catch(() => null);
+        if (user) {
+          dispatch(setCredentials({ user, accessToken: result.accessToken, refreshToken: result.refreshToken }));
+        }
       } catch {
-        // stale/expired refresh token — user stays logged out, ProtectedRoute redirects
+        dispatch(clearCredentials());
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+  }
+  return bootstrapPromise;
+}
+
+function AuthAndSocketLifecycle() {
+  const dispatch = useDispatch<AppDispatch>();
+  const accessToken = useSelector(selectAccessToken);
+
+  useEffect(() => {
+    bootstrapAuth(dispatch, store.getState);
   }, [dispatch]);
 
   useEffect(() => {
-    return store.subscribe(() => {
-      const token = store.getState().auth.accessToken;
-      if (token) connectSocket(store);
-      else disconnectSocket();
-    });
-  }, []);
+    if (accessToken) connectSocket(dispatch, accessToken);
+    else disconnectSocket();
+  }, [accessToken, dispatch]);
+
+  useEffect(() => {
+    function handleOnline() {
+      flushQueue((message) =>
+        dispatch(
+          chatApi.endpoints.sendMessage.initiate({
+            workspaceId: message.workspaceId,
+            channelId: message.channelId,
+            body: message.body,
+          }),
+        ).unwrap().then(() => {}),
+      ).catch(() => {
+        // best-effort: whatever's left stays queued for the next `online` event
+      });
+    }
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [dispatch]);
 
   return <App />;
 }
@@ -67,7 +108,7 @@ createRoot(document.getElementById("root")!).render(
     <ErrorBoundary fallback={<RootFallback />}>
       <Provider store={store}>
         <BrowserRouter>
-          <SilentRefreshAndSocket />
+          <AuthAndSocketLifecycle />
         </BrowserRouter>
       </Provider>
     </ErrorBoundary>

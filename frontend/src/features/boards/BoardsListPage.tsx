@@ -7,14 +7,20 @@ export function BoardsListPage() {
   const { data: boards = [], isLoading } = useListBoardsQuery({ workspaceId });
   const [createBoard, { isLoading: isCreating }] = useCreateBoardMutation();
   const [title, setTitle] = useState("");
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    const board = await createBoard({ workspaceId, title }).unwrap();
-    setTitle("");
-    navigate(`/workspaces/${workspaceId}/boards/${board._id}`);
+    setError("");
+    try {
+      const board = await createBoard({ workspaceId, title }).unwrap();
+      setTitle("");
+      navigate(`/workspaces/${workspaceId}/boards/${board._id}`);
+    } catch {
+      setError("Couldn't create the board. Check your permissions and try again.");
+    }
   }
 
   return (
@@ -32,6 +38,7 @@ export function BoardsListPage() {
           + New board
         </button>
       </form>
+      {error && <p className="field-error">{error}</p>}
       {isLoading && <p>Loading...</p>}
       <div style={{ display: "grid", gap: "0.6rem", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
         {boards.map((b) => (

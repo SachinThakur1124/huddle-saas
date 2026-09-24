@@ -7,14 +7,20 @@ export function ChatChannelListPage() {
   const { data: channels = [], isLoading } = useListChannelsQuery({ workspaceId });
   const [createChannel, { isLoading: isCreating }] = useCreateChannelMutation();
   const [name, setName] = useState("");
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    const channel = await createChannel({ workspaceId, name }).unwrap();
-    setName("");
-    navigate(`/workspaces/${workspaceId}/chat/${channel._id}`);
+    setError("");
+    try {
+      const channel = await createChannel({ workspaceId, name }).unwrap();
+      setName("");
+      navigate(`/workspaces/${workspaceId}/chat/${channel._id}`);
+    } catch {
+      setError("Couldn't create the channel. Check your permissions and try again.");
+    }
   }
 
   return (
@@ -32,6 +38,7 @@ export function ChatChannelListPage() {
           + New channel
         </button>
       </form>
+      {error && <p className="field-error">{error}</p>}
       {isLoading && <p>Loading...</p>}
       <div style={{ display: "grid", gap: "0.5rem" }}>
         {channels.map((c) => (
