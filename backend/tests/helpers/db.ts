@@ -1,5 +1,6 @@
 import { MongoMemoryReplSet } from "mongodb-memory-server";
 import mongoose from "mongoose";
+import { redisClient } from "../../src/lib/redis";
 
 let replSet: MongoMemoryReplSet;
 
@@ -18,4 +19,5 @@ export async function clearTestDb() {
 export async function disconnectTestDb() {
   await mongoose.disconnect();
   await replSet.stop();
+  redisClient.disconnect();
 }
