@@ -2,6 +2,7 @@ import express, { Express } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { env } from "./config/env";
+import { authRoutes } from "./routes/authRoutes";
 
 export function createApp(): Express {
   const app = express();
@@ -12,6 +13,8 @@ export function createApp(): Express {
   app.get("/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
   });
+
+  app.use("/auth", authRoutes);
 
   return app;
 }
