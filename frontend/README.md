@@ -12,19 +12,27 @@ full project overview and architecture.
 
 ## Tests
 
-- `npm test` — Vitest + React Testing Library
+- `npm test` — Vitest + React Testing Library (7 tests)
+- `npm run lint` — same check CI runs
 
 ## Build
 
 - `npm run build` — type-checks then produces a production build in `dist/`
 
-## Known limitations
+## Auth session handling
 
-- The access token lives only in Redux (not persisted) to limit XSS
-  exposure; the refresh token is persisted to `localStorage` because the
-  backend returns it in the JSON response body rather than an httpOnly
-  cookie (see the backend's Known Limitations). On page reload, a silent
-  refresh runs once using the stored refresh token.
+The access token lives only in Redux (not persisted) to limit XSS exposure
+and expires after 15 minutes; the refresh token is persisted to
+`localStorage` because the backend returns it in the JSON response body
+rather than an httpOnly cookie (see the backend's Known Limitations).
+- On page reload, `main.tsx` redeems the persisted refresh token once
+  (guarded against React StrictMode's double-invoke) before rendering any
+  protected route, showing a loading state in the meantime.
+- Once logged in, `app/api.ts`'s `baseQueryWithReauth` transparently
+  refreshes on any 401 and retries the original request, so a session
+  doesn't silently break mid-use when the access token expires.
+
+## Known limitations
 - Offline support is an app-shell cache (via `vite-plugin-pwa`) plus an
   IndexedDB queue for outbound chat messages sent while offline — not a
   full offline-first data sync.

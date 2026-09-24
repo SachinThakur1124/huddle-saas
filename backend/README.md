@@ -13,9 +13,10 @@ project overview, architecture diagram, and Docker instructions.
 
 ## Tests
 
-- `npm test` — full suite (44 tests)
+- `npm test` — full suite (73 tests)
 - `npm run test:coverage` — with coverage report (60%+ gate on
   `src/services/**` and `src/middleware/**`)
+- `npm run lint` / `npm run typecheck` — same checks CI runs
 
 ## API docs
 
