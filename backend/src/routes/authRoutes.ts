@@ -10,6 +10,27 @@ const registerSchema = z.object({
   name: z.string().min(1),
 });
 
+/**
+ * @openapi
+ * /auth/register:
+ *   post:
+ *     summary: Register a new user
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password, name]
+ *             properties:
+ *               email: { type: string }
+ *               password: { type: string, minLength: 8 }
+ *               name: { type: string }
+ *     responses:
+ *       201: { description: User created with token pair }
+ *       400: { description: Validation error }
+ *       409: { description: Email already registered }
+ */
 authRoutes.post("/register", async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
