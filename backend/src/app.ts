@@ -4,6 +4,7 @@ import helmet from "helmet";
 import { env } from "./config/env";
 import { authRoutes } from "./routes/authRoutes";
 import { workspaceRoutes } from "./routes/workspaceRoutes";
+import { pageRoutes } from "./routes/pageRoutes";
 
 export function createApp(): Express {
   const app = express();
@@ -17,6 +18,7 @@ export function createApp(): Express {
 
   app.use("/auth", authRoutes);
   app.use("/workspaces", workspaceRoutes);
+  app.use("/workspaces/:workspaceId/pages", pageRoutes);
 
   return app;
 }
