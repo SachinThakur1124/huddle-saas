@@ -2,6 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { AuthService } from "../services/authService";
 import { authRateLimit } from "../middleware/rateLimit";
+import { requireAuth, AuthedRequest } from "../middleware/requireAuth";
+import { User } from "../models/User";
 
 export const authRoutes = Router();
 
@@ -88,4 +90,10 @@ authRoutes.post("/logout", async (req, res) => {
     await AuthService.logout(parsed.data.refreshToken);
   }
   res.status(204).send();
+});
+
+authRoutes.get("/me", requireAuth, async (req: AuthedRequest, res) => {
+  const user = await User.findById(req.userId);
+  if (!user) return res.status(404).json({ error: "User not found" });
+  res.json({ id: user._id.toString(), email: user.email, name: user.name });
 });

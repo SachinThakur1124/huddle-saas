@@ -30,3 +30,20 @@ describe("POST /auth/register + /auth/login", () => {
       .expect(400);
   });
 });
+
+describe("GET /auth/me", () => {
+  it("returns the current user for a valid access token", async () => {
+    const reg = await request(app)
+      .post("/auth/register")
+      .send({ email: "me@x.com", password: "password123", name: "Me" });
+    const res = await request(app)
+      .get("/auth/me")
+      .set("Authorization", `Bearer ${reg.body.accessToken}`)
+      .expect(200);
+    expect(res.body).toEqual({ id: expect.any(String), email: "me@x.com", name: "Me" });
+  });
+
+  it("returns 401 without a token", async () => {
+    await request(app).get("/auth/me").expect(401);
+  });
+});
