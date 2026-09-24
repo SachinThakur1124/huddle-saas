@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { requireRole, WorkspaceScopedRequest } from "../middleware/requireRole";
 import { ChatService } from "../services/chatService";
 import { emitToWorkspace } from "../sockets/index";
+import { mentionQueue } from "../jobs/queues";
 
 export const chatRoutes = Router({ mergeParams: true });
 
@@ -33,6 +34,12 @@ chatRoutes.post(
       parsed.data.body,
     );
     emitToWorkspace(req.params.workspaceId, "message:new", message);
+    await mentionQueue.add("mention", {
+      body: parsed.data.body,
+      authorId: req.userId,
+      workspaceId: req.params.workspaceId,
+      messageId: message._id.toString(),
+    });
     res.status(201).json(message);
   },
 );
