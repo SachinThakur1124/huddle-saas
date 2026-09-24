@@ -1,40 +1,44 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useGetPageQuery, useUpdatePageMutation, useDeletePageMutation } from "./pagesApi";
+import { useGetPageQuery, useUpdatePageMutation, useDeletePageMutation, Page } from "./pagesApi";
 
-export function PageDetailPage() {
-  const { workspaceId = "", pageId = "" } = useParams();
-  const { data: page, isLoading } = useGetPageQuery({ workspaceId, pageId });
+// Keyed by page._id at the call site below, so navigating to a different
+// page remounts this component fresh — the title/text fields initialize
+// directly from `page` with no effect needed to sync them on every load.
+function PageEditor({ workspaceId, page }: { workspaceId: string; page: Page }) {
   const [updatePage] = useUpdatePageMutation();
   const [deletePage] = useDeletePageMutation();
   const navigate = useNavigate();
 
-  const [title, setTitle] = useState("");
-  const [text, setText] = useState("");
+  const [title, setTitle] = useState(page.title);
+  const [text, setText] = useState((page.contentJson as { text?: string })?.text ?? "");
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (page) {
-      setTitle(page.title);
-      setText((page.contentJson as { text?: string })?.text ?? "");
-    }
-  }, [page]);
-
-  function saveTitle() {
-    if (page && title !== page.title) {
-      updatePage({ workspaceId, pageId, title });
+  async function saveTitle() {
+    if (title === page.title) return;
+    try {
+      await updatePage({ workspaceId, pageId: page._id, title }).unwrap();
+    } catch {
+      setError("Couldn't save the title change.");
     }
   }
 
-  function saveText() {
-    updatePage({ workspaceId, pageId, contentJson: { text } });
+  async function saveText() {
+    try {
+      await updatePage({ workspaceId, pageId: page._id, contentJson: { text } }).unwrap();
+    } catch {
+      setError("Couldn't save your edits.");
+    }
   }
 
   async function handleDelete() {
-    await deletePage({ workspaceId, pageId }).unwrap();
-    navigate(`/workspaces/${workspaceId}/pages`);
+    try {
+      await deletePage({ workspaceId, pageId: page._id }).unwrap();
+      navigate(`/workspaces/${workspaceId}/pages`);
+    } catch {
+      setError("Couldn't delete this page. Check your permissions and try again.");
+    }
   }
-
-  if (isLoading) return <p>Loading...</p>;
 
   return (
     <div>
@@ -58,6 +62,7 @@ export function PageDetailPage() {
           Delete
         </button>
       </div>
+      {error && <p className="field-error">{error}</p>}
       <textarea
         aria-label="Page content"
         value={text}
@@ -77,4 +82,15 @@ export function PageDetailPage() {
       />
     </div>
   );
+}
+
+export function PageDetailPage() {
+  const { workspaceId = "", pageId = "" } = useParams();
+  const { data: page, isLoading, isError } = useGetPageQuery({ workspaceId, pageId });
+
+  if (isLoading) return <p>Loading...</p>;
+  if (isError || !page) {
+    return <p className="field-error">This page doesn't exist or you don't have access to it.</p>;
+  }
+  return <PageEditor key={page._id} workspaceId={workspaceId} page={page} />;
 }

@@ -9,8 +9,10 @@ function isNetworkError(err: unknown): boolean {
   return typeof err === "object" && err !== null && "status" in err && err.status === "FETCH_ERROR";
 }
 
-export function ChatPage() {
-  const { workspaceId = "", channelId = "" } = useParams();
+// Keyed by channelId at the call site below, so switching channels remounts
+// this component fresh — pagination (`before`) and the one-time initial
+// scroll both reset naturally, with no effect needed to reset them.
+function ChatChannelView({ workspaceId, channelId }: { workspaceId: string; channelId: string }) {
   const currentUser = useSelector(selectCurrentUser);
   const [before, setBefore] = useState<string | undefined>(undefined);
   const { data, isFetching } = useListMessagesQuery({ workspaceId, channelId, before });
@@ -20,14 +22,6 @@ export function ChatPage() {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const hasScrolledInitially = useRef(false);
-
-  useEffect(() => {
-    // Switching channels resets pagination and the one-time initial
-    // scroll-to-bottom — without this, reopening a different channel
-    // would keep an old `before` cursor and never re-scroll down.
-    setBefore(undefined);
-    hasScrolledInitially.current = false;
-  }, [channelId]);
 
   useEffect(() => {
     // Infinite scroll: when the sentinel above the oldest message scrolls
@@ -106,4 +100,9 @@ export function ChatPage() {
       </form>
     </div>
   );
+}
+
+export function ChatPage() {
+  const { workspaceId = "", channelId = "" } = useParams();
+  return <ChatChannelView key={channelId} workspaceId={workspaceId} channelId={channelId} />;
 }
