@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { AuthService } from "../services/authService";
+import { authRateLimit } from "../middleware/rateLimit";
 
 export const authRoutes = Router();
 
@@ -31,7 +32,7 @@ const registerSchema = z.object({
  *       400: { description: Validation error }
  *       409: { description: Email already registered }
  */
-authRoutes.post("/register", async (req, res) => {
+authRoutes.post("/register", authRateLimit, async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
@@ -53,7 +54,7 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-authRoutes.post("/login", async (req, res) => {
+authRoutes.post("/login", authRateLimit, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });

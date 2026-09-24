@@ -26,14 +26,27 @@ export function requireRole(minRole: Role) {
       return res.status(400).json({ error: "Invalid workspaceId" });
     }
 
-    let role = await cache.get(userId, workspaceId);
+    // A Redis outage must degrade to a slower Mongo lookup, not fail every
+    // workspace request — cache errors are swallowed here deliberately.
+    let role: Role | null = null;
+    try {
+      role = await cache.get(userId, workspaceId);
+    } catch {
+      role = null;
+    }
+
     if (!role) {
       const membership = await Membership.findOne({ userId, workspaceId });
       if (!membership) {
         return res.status(403).json({ error: "Not a member of this workspace" });
       }
       role = membership.role;
-      await cache.set(userId, workspaceId, role);
+      try {
+        await cache.set(userId, workspaceId, role);
+      } catch {
+        // best-effort cache write; a failed one just means the next
+        // request pays the Mongo lookup cost again
+      }
     }
 
     if (ROLE_ORDER.indexOf(role) < ROLE_ORDER.indexOf(minRole)) {

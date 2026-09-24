@@ -53,4 +53,20 @@ describe("AuthService", () => {
     const tokens = await RefreshToken.find({});
     expect(tokens.every((t) => t.revoked)).toBe(true);
   });
+
+  it("only one of two concurrent refreshes with the same token succeeds", async () => {
+    const { refreshToken } = await AuthService.register(
+      "concurrent@x.com",
+      "password123",
+      "Ada",
+    );
+
+    const results = await Promise.allSettled([
+      AuthService.refresh(refreshToken),
+      AuthService.refresh(refreshToken),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    expect(fulfilled).toHaveLength(1);
+  });
 });

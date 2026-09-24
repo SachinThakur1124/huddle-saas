@@ -23,7 +23,7 @@ workspaceRoutes.get("/", async (req: AuthedRequest, res) => {
 });
 
 const roleSchema = z.object({
-  userId: z.string().min(1),
+  userId: z.string().regex(/^[a-f0-9]{24}$/i, "Invalid userId"),
   role: z.enum(["viewer", "member", "admin", "owner"]),
 });
 
@@ -35,6 +35,8 @@ workspaceRoutes.post(
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     const membership = await WorkspaceService.setRole(
       req.params.workspaceId,
+      req.userId!,
+      req.membership!.role,
       parsed.data.userId,
       parsed.data.role,
     );

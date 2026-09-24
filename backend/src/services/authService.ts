@@ -60,22 +60,32 @@ export const AuthService = {
 
   async refresh(rawToken: string) {
     const tokenHash = hashToken(rawToken);
-    const record = await RefreshToken.findOne({ tokenHash });
-    if (!record) throw new Error("Invalid refresh token");
 
-    if (record.revoked) {
-      await RefreshToken.updateMany(
-        { familyId: record.familyId },
-        { revoked: true },
-      );
+    // Atomically claim the token (revoked:false -> true) in one query, so
+    // two concurrent refresh calls with the same token can't both read
+    // revoked:false before either write lands and both mint a child from
+    // the same parent. `new: false` returns the PRE-update document so we
+    // still have its expiresAt/familyId/userId.
+    const record = await RefreshToken.findOneAndUpdate(
+      { tokenHash, revoked: false },
+      { revoked: true },
+      { new: false },
+    );
+
+    if (!record) {
+      // Either the token never existed, or it lost the race above (already
+      // revoked — a legitimate prior rotation, or a replay). Either way,
+      // treat it as reuse and kill the whole family; the caller that won
+      // the race already has a valid child token.
+      const existing = await RefreshToken.findOne({ tokenHash });
+      if (!existing) throw new Error("Invalid refresh token");
+      await RefreshToken.updateMany({ familyId: existing.familyId }, { revoked: true });
       throw new Error("Refresh token has been revoked (reuse detected)");
     }
+
     if (record.expiresAt.getTime() < Date.now()) {
       throw new Error("Refresh token expired");
     }
-
-    record.revoked = true;
-    await record.save();
 
     const accessToken = issueAccessToken(record.userId.toString());
     const refreshToken = await issueRefreshToken(
