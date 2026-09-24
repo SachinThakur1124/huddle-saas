@@ -10,6 +10,29 @@ workspaceRoutes.use(requireAuth);
 
 const createSchema = z.object({ name: z.string().min(1).max(100) });
 
+/**
+ * @openapi
+ * /workspaces:
+ *   post:
+ *     summary: Create a workspace (caller becomes its owner)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *     responses:
+ *       201: { description: Workspace created }
+ *   get:
+ *     summary: List workspaces the caller is a member of
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Array of workspaces }
+ */
 workspaceRoutes.post("/", async (req: AuthedRequest, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });

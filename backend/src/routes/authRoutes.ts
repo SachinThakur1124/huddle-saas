@@ -56,6 +56,26 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+/**
+ * @openapi
+ * /auth/login:
+ *   post:
+ *     summary: Log in with email and password
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email: { type: string }
+ *               password: { type: string }
+ *     responses:
+ *       200: { description: Token pair issued }
+ *       400: { description: Validation error }
+ *       401: { description: Invalid email or password }
+ */
 authRoutes.post("/login", authRateLimit, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -71,6 +91,24 @@ authRoutes.post("/login", authRateLimit, async (req, res) => {
 
 const refreshSchema = z.object({ refreshToken: z.string().min(1) });
 
+/**
+ * @openapi
+ * /auth/refresh:
+ *   post:
+ *     summary: Exchange a refresh token for a new token pair (rotates the refresh token)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [refreshToken]
+ *             properties:
+ *               refreshToken: { type: string }
+ *     responses:
+ *       200: { description: New token pair issued }
+ *       401: { description: Invalid, expired, or already-revoked refresh token }
+ */
 authRoutes.post("/refresh", async (req, res) => {
   const parsed = refreshSchema.safeParse(req.body);
   if (!parsed.success) {

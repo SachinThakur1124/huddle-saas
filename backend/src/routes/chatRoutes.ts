@@ -27,6 +27,38 @@ chatRoutes.post("/", requireRole("member"), async (req: WorkspaceScopedRequest, 
 
 const messageSchema = z.object({ body: z.string().min(1).max(4000) });
 
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/channels/{channelId}/messages:
+ *   post:
+ *     summary: Post a message to a channel (broadcasts message:new over Socket.io)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *       - { name: channelId, in: path, required: true, schema: { type: string } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [body]
+ *             properties:
+ *               body: { type: string, maxLength: 4000 }
+ *     responses:
+ *       201: { description: Message created }
+ *       404: { description: Channel not found (or belongs to another workspace) }
+ *   get:
+ *     summary: List messages in a channel, newest page first, oldest-first within the page
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *       - { name: channelId, in: path, required: true, schema: { type: string } }
+ *       - { name: before, in: query, required: false, schema: { type: string }, description: "Cursor — the _id of the oldest message already seen" }
+ *       - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100 } }
+ *     responses:
+ *       200: { description: "{ messages, nextCursor }" }
+ */
 chatRoutes.post(
   "/:channelId/messages",
   validateObjectIdParams("channelId"),

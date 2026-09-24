@@ -12,6 +12,33 @@ boardRoutes.use(requireAuth, requireRole("viewer"));
 
 const createBoardSchema = z.object({ title: z.string().min(1).max(100) });
 
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/boards:
+ *   get:
+ *     summary: List boards in a workspace
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: Array of boards }
+ *   post:
+ *     summary: Create a board
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title]
+ *             properties:
+ *               title: { type: string }
+ *     responses:
+ *       201: { description: Board created }
+ */
 boardRoutes.get("/", async (req: WorkspaceScopedRequest, res) => {
   const boards = await BoardService.listBoards(req.params.workspaceId);
   res.json(boards);
@@ -28,6 +55,19 @@ boardRoutes.post("/", requireRole("member"), async (req: WorkspaceScopedRequest,
   res.status(201).json(board);
 });
 
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/boards/{boardId}:
+ *   get:
+ *     summary: Get a board with its lists and cards
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *       - { name: boardId, in: path, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: "{ board, lists, cards }" }
+ *       404: { description: Board not found (or belongs to another workspace) }
+ */
 boardRoutes.get(
   "/:boardId",
   validateObjectIdParams("boardId"),
