@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireRole, WorkspaceScopedRequest } from "../middleware/requireRole";
 import { ChatService } from "../services/chatService";
+import { emitToWorkspace } from "../sockets/index";
 
 export const chatRoutes = Router({ mergeParams: true });
 
@@ -31,6 +32,7 @@ chatRoutes.post(
       req.params.workspaceId,
       parsed.data.body,
     );
+    emitToWorkspace(req.params.workspaceId, "message:new", message);
     res.status(201).json(message);
   },
 );

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireRole, WorkspaceScopedRequest } from "../middleware/requireRole";
 import { BoardService } from "../services/boardService";
+import { emitToWorkspace } from "../sockets/index";
 
 export const boardRoutes = Router({ mergeParams: true });
 
@@ -66,6 +67,11 @@ boardRoutes.post(
       parsed.data.toListId,
       parsed.data.toPosition,
     );
+    emitToWorkspace(req.params.workspaceId, "card:moved", {
+      cardId: req.params.cardId,
+      toListId: parsed.data.toListId,
+      toPosition: parsed.data.toPosition,
+    });
     res.status(200).json({ ok: true });
   },
 );
