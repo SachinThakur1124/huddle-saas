@@ -174,9 +174,39 @@ erDiagram
 
 ## 9. Known limitations (stated up front, not discovered by the evaluator)
 
-- Not every one of the 35-40 endpoints gets exhaustive filtering/pagination —
-  breadth across the three domains is prioritized over exhaustive depth in any one.
-- Only 2 BullMQ job types are real; more are named as "would add" in the README
-  rather than stubbed with fake logic.
+*Updated 2026-09-24 after the backend's final code review — corrected to
+match what's actually built rather than the original plan.*
+
+- Endpoint count is ~25, not 35-40. Not every endpoint gets exhaustive
+  filtering/pagination — breadth across the three domains is prioritized
+  over exhaustive depth in any one.
+- Of the 2 planned BullMQ job types, `mention-notification` is fully real
+  (enqueued on every message, scoped to actual workspace members). The
+  `search-reindex` job exists and is unit-tested but is **not enqueued
+  anywhere** — Mongo's text indexes update automatically on write, so
+  there was no real reindex work to schedule; this job is a stub, not the
+  "2 real jobs" originally claimed.
+- Swagger/OpenAPI annotations exist on 1 of ~25 routes (`POST
+  /auth/register`, as the documented pattern). `/api/docs` is not a
+  complete API reference. Also note: `apis: ["src/routes/*.ts"]` reads
+  TypeScript source at runtime, which won't resolve from a Docker image
+  that ships only compiled `dist/` — the DevOps plan needs to either copy
+  `src/routes` into the image or switch to a pre-generated OpenAPI JSON.
+- The refresh token is returned in the JSON response body, not an
+  httpOnly cookie (this backend's auth routes don't set one). The
+  frontend therefore has no choice but to store it in `localStorage`,
+  which is more exposed to XSS than a cookie would be. A same-day ruling,
+  not an oversight — see the backend plan's execution ledger.
+- Activity-feed aggregation (merging recent pages/cards/messages) and a
+  route to read the audit log (the service exists, nothing calls it) were
+  cut for time.
+- `/uploads` is served statically with no auth check — anyone with a
+  file's (randomly-named) URL can fetch it.
 - Offline support and file storage are intentionally minimal (see §2, §5).
 - Live deploy (if reached) runs on free-tier infra and may cold-start.
+
+The security-relevant gaps a code review actually found and fixed —
+cross-workspace data access, an unauth'd socket room, admin privilege
+escalation, and non-deterministic card ordering — are documented in the
+backend plan's execution ledger, not repeated here, since they're fixed
+rather than outstanding.
