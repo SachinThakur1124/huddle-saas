@@ -1,0 +1,85 @@
+services:
+  mongo:
+    image: mongo:7
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: transactions require a replica set, so mongo must be
+  # initiated as one before the backend connects (see the backend plan's
+  # execution ledger for how this was discovered — a standalone mongod
+  # 500s on every card move/create with "Transaction numbers are only
+  # allowed on a replica set member or mongos").
+  mongo-init:
+    image: mongo:7
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        mongosh --host mongo:27017 --quiet --eval '
+          try {
+            rs.status();
+            print("replica set already initiated");
+          } catch (e) {
+            rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "mongo:27017" }] });
+            print("replica set initiated");
+          }
+        '
+
+  redis:
+    image: redis:7-alpine
+    # No host port published: only backend needs it, over the internal
+    # compose network as redis:6379. Avoids clashing with a Redis already
+    # running on the host's default port.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      MONGO_URI: mongodb://mongo:27017/huddle?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      # Local-only placeholders — a real deployment must override these
+      # (see backend/.env.example and the DevOps plan's Known Limitations).
+      JWT_ACCESS_SECRET: local-compose-access-secret-change-me
+      JWT_REFRESH_SECRET: local-compose-refresh-secret-change-me
+      CORS_ORIGIN: http://localhost:5173
+    volumes:
+      - backend-uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:4000
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  mongo-data:
+  backend-uploads:
