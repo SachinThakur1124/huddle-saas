@@ -44,6 +44,8 @@ To run either app outside Docker for local development, see
 | Boards | Board → List → Card, drag-and-drop reorder across lists, dense position invariant maintained transactionally |
 | Chat | Channels, cursor-paginated messages, Socket.io realtime (JWT-authenticated, membership-checked room joins) |
 | Search | Cross-entity (Pages/Cards/Messages) text search, scoped to the workspace |
+| Activity + audit | `GET /workspaces/:id/activity` merges recent pages/cards/messages into one feed; `GET /workspaces/:id/audit-log` (admin+) reads the audit trail every mutation already writes to |
+| Attachments | Uploads require auth + workspace membership to download (not a static, unauthenticated file path) |
 | Jobs | BullMQ: `@mention` notifications are real and workspace-scoped; `search-reindex` exists and is tested but isn't wired to anything (Mongo text indexes update on write, so there's no real reindex work — see Known Limitations) |
 | Frontend | React + Vite + TS, Redux Toolkit + RTK Query (optimistic updates, 401-triggered reauth), React Hook Form + Zod, `@dnd-kit`, dark mode, route-level error boundaries, a minimal offline queue for chat |
 | DevOps | Docker + docker-compose (one-command local run), GitHub Actions CI (lint → typecheck → test-with-coverage-gate → build → docker build) |

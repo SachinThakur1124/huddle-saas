@@ -174,36 +174,41 @@ erDiagram
 
 ## 9. Known limitations (stated up front, not discovered by the evaluator)
 
-*Updated 2026-09-24 after the backend's final code review — corrected to
-match what's actually built rather than the original plan.*
+*Updated 2026-09-24, twice: once after the backend's final code review,
+again after closing the gap on three items that review flagged as cut for
+time. This is the current, accurate state — not the original plan.*
 
-- Endpoint count is ~25, not 35-40. Not every endpoint gets exhaustive
+- Endpoint count is ~28, not 35-40. Not every endpoint gets exhaustive
   filtering/pagination — breadth across the three domains is prioritized
   over exhaustive depth in any one.
 - Of the 2 planned BullMQ job types, `mention-notification` is fully real
   (enqueued on every message, scoped to actual workspace members). The
   `search-reindex` job exists and is unit-tested but is **not enqueued
   anywhere** — Mongo's text indexes update automatically on write, so
-  there was no real reindex work to schedule; this job is a stub, not the
-  "2 real jobs" originally claimed.
-- Swagger/OpenAPI annotations exist on 1 of ~25 routes (`POST
+  there was no real reindex work to schedule; this job is a stub, not a
+  second real one.
+- Swagger/OpenAPI annotations exist on 1 of ~28 routes (`POST
   /auth/register`, as the documented pattern). `/api/docs` is not a
-  complete API reference. Also note: `apis: ["src/routes/*.ts"]` reads
-  TypeScript source at runtime, which won't resolve from a Docker image
-  that ships only compiled `dist/` — the DevOps plan needs to either copy
-  `src/routes` into the image or switch to a pre-generated OpenAPI JSON.
+  complete API reference. (The Dockerfile does correctly ship
+  `src/routes` alongside compiled `dist/` so `apis: ["src/routes/*.ts"]`
+  still resolves at runtime in the container — that risk is closed, only
+  the annotation coverage itself is thin.)
 - The refresh token is returned in the JSON response body, not an
   httpOnly cookie (this backend's auth routes don't set one). The
   frontend therefore has no choice but to store it in `localStorage`,
   which is more exposed to XSS than a cookie would be. A same-day ruling,
   not an oversight — see the backend plan's execution ledger.
-- Activity-feed aggregation (merging recent pages/cards/messages) and a
-  route to read the audit log (the service exists, nothing calls it) were
-  cut for time.
-- `/uploads` is served statically with no auth check — anyone with a
-  file's (randomly-named) URL can fetch it.
 - Offline support and file storage are intentionally minimal (see §2, §5).
-- Live deploy (if reached) runs on free-tier infra and may cold-start.
+  File storage is local disk (Docker volume), not S3 — documented as
+  pluggable, not built.
+- No live deploy — repo + `docker compose up --build` only, by explicit
+  user choice given the timeline.
+
+Closed since the review (previously listed here as cut for time):
+activity-feed aggregation and an audit-log read route now exist
+(`GET /workspaces/:id/activity`, `GET /workspaces/:id/audit-log`), and
+`/uploads` now requires auth + workspace membership instead of being
+served as a static, unauthenticated file path.
 
 The security-relevant gaps a code review actually found and fixed —
 cross-workspace data access, an unauth'd socket room, admin privilege
