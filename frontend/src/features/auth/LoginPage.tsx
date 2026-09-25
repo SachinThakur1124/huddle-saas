@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { useLoginMutation } from "./authApi";
 import { setCredentials } from "./authSlice";
+import { getErrorMessage } from "../../app/errors";
 import type { AppDispatch } from "../../app/store";
 
 const schema = z.object({
@@ -31,24 +32,31 @@ export function LoginPage() {
 
   return (
     <div className="auth-screen">
-      <form className="card auth-card" onSubmit={handleSubmit(onSubmit)}>
-        <h1>Sign in to Huddle</h1>
+      <div className="auth-brand">
+        <span className="app-brand-mark" aria-hidden="true">
+          H
+        </span>
+        Huddle
+      </div>
+      <form className="card auth-card" onSubmit={handleSubmit(onSubmit)} noValidate>
+        <h1>Sign in</h1>
+        <p className="auth-subtitle">Pick up where your team left off.</p>
         <div className="field">
           <label htmlFor="email">Email</label>
-          <input id="email" type="email" {...register("email")} />
+          <input id="email" type="email" autoComplete="email" {...register("email")} />
           {errors.email && <span className="field-error">{errors.email.message}</span>}
         </div>
         <div className="field">
           <label htmlFor="password">Password</label>
-          <input id="password" type="password" {...register("password")} />
+          <input id="password" type="password" autoComplete="current-password" {...register("password")} />
           {errors.password && <span className="field-error">{errors.password.message}</span>}
         </div>
-        {error && <p className="field-error">Invalid email or password.</p>}
-        <button className="btn" type="submit" disabled={isLoading}>
-          {isLoading ? "Signing in..." : "Sign in"}
+        {error && <div className="alert alert-error">{getErrorMessage(error, "Invalid email or password.")}</div>}
+        <button className="btn" type="submit" disabled={isLoading} style={{ width: "100%" }}>
+          {isLoading ? <span className="spinner" /> : "Sign in"}
         </button>
-        <p style={{ marginTop: "1rem" }}>
-          No account? <Link to="/register">Register</Link>
+        <p style={{ marginTop: "1.2rem", fontSize: "0.9rem", color: "var(--text-muted)" }}>
+          No account? <Link to="/register">Create one</Link>
         </p>
       </form>
     </div>

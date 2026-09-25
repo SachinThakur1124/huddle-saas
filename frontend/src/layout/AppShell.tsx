@@ -48,24 +48,59 @@ export function AppShell() {
     navigate("/login");
   }
 
+  const initials = user?.name
+    ? user.name
+        .split(" ")
+        .map((part) => part[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase()
+    : "?";
+
   return (
     <div className="app-shell">
       <aside className="app-sidebar">
+        <div className="app-brand">
+          <span className="app-brand-mark" aria-hidden="true">
+            H
+          </span>
+          Huddle
+        </div>
         <WorkspaceSwitcher />
         <nav>
           <NavLink to="pages" className="nav-link">
+            <span className="nav-icon" aria-hidden="true">
+              📄
+            </span>
             Pages
           </NavLink>
           <NavLink to="boards" className="nav-link">
+            <span className="nav-icon" aria-hidden="true">
+              🗂️
+            </span>
             Boards
           </NavLink>
           <NavLink to="chat" className="nav-link">
+            <span className="nav-icon" aria-hidden="true">
+              💬
+            </span>
             Chat
           </NavLink>
         </nav>
         <div style={{ marginTop: "auto" }}>
-          <button type="button" className="btn btn-ghost" onClick={handleLogout}>
-            Log out {user ? `(${user.name})` : ""}
+          {user && (
+            <div className="app-user">
+              <span className="avatar" aria-hidden="true">
+                {initials}
+              </span>
+              <div style={{ minWidth: 0 }}>
+                <span className="app-user-name">{user.name}</span>
+                <span className="app-user-email">{user.email}</span>
+              </div>
+            </div>
+          )}
+          <button type="button" className="btn btn-ghost" style={{ width: "100%" }} onClick={handleLogout}>
+            Log out
           </button>
         </div>
       </aside>

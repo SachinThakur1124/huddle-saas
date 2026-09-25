@@ -28,21 +28,28 @@ export function SearchBar() {
 
   return (
     <div style={{ position: "relative", width: 320 }}>
+      <span
+        aria-hidden="true"
+        style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}
+      >
+        🔍
+      </span>
       <input
         aria-label="Search this workspace"
         placeholder="Search pages, cards, messages..."
         value={query}
+        maxLength={200}
         onChange={(e) => setQuery(e.target.value)}
         style={{
           width: "100%",
-          padding: "0.5rem 0.8rem",
+          padding: "0.5rem 0.8rem 0.5rem 2.1rem",
           borderRadius: "var(--radius)",
           border: "1px solid var(--border)",
           background: "var(--surface-2)",
           color: "var(--text)",
         }}
       />
-      {query && results.length > 0 && (
+      {query.trim() && (
         <ul
           className="card"
           style={{
@@ -56,8 +63,14 @@ export function SearchBar() {
             zIndex: 10,
             maxHeight: 280,
             overflow: "auto",
+            boxShadow: "var(--shadow-lg)",
           }}
         >
+          {results.length === 0 && (
+            <li style={{ padding: "0.6rem 0.7rem", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+              No results for "{query}"
+            </li>
+          )}
           {results.map((r) => (
             <li key={`${r.type}-${r.id}`}>
               <button
@@ -66,7 +79,7 @@ export function SearchBar() {
                 style={{ width: "100%", justifyContent: "flex-start", border: "none" }}
                 onClick={() => goTo(r)}
               >
-                <span style={{ color: "var(--text-muted)", marginRight: 6 }}>{r.type}</span>
+                <span className="badge badge-primary">{r.type}</span>
                 {r.title}
               </button>
             </li>

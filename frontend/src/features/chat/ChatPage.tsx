@@ -66,35 +66,48 @@ function ChatChannelView({ workspaceId, channelId }: { workspaceId: string; chan
     }
   }
 
+  const isEmpty = !isFetching && (data?.messages.length ?? 0) === 0;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column" }}>
+    <div className="chat-scroll">
+      <div className="chat-messages">
         <div ref={sentinelRef} />
-        {data?.messages.map((m) => (
-          <div
-            key={m._id}
-            className="card"
-            style={{
-              alignSelf: m.authorId === currentUser?.id ? "flex-end" : "flex-start",
-              padding: "0.5rem 0.8rem",
-              margin: "0.2rem 0",
-              maxWidth: "70%",
-            }}
-          >
-            {m.body}
+        {isFetching && !data?.messages.length && (
+          <div className="loading-row">
+            <span className="spinner" /> Loading messages...
           </div>
-        ))}
+        )}
+        {isEmpty && (
+          <div className="empty-state" style={{ margin: "auto" }}>
+            <span className="empty-state-icon" aria-hidden="true">
+              💬
+            </span>
+            <h3>No messages yet</h3>
+            <p>Say hi to get the conversation started.</p>
+          </div>
+        )}
+        {data?.messages.map((m) => {
+          const own = m.authorId === currentUser?.id;
+          return (
+            <div key={m._id} className={`chat-bubble${own ? " own" : ""}`}>
+              {m.body}
+              <span className="chat-bubble-meta">
+                {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          );
+        })}
         <div ref={bottomRef} />
       </div>
-      <form onSubmit={handleSend} style={{ display: "flex", gap: "0.5rem", marginTop: "0.8rem" }}>
+      <form onSubmit={handleSend} className="chat-composer">
         <input
           aria-label="Message"
           value={draft}
+          maxLength={4000}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Message #channel"
-          style={{ flex: 1, padding: "0.6rem", borderRadius: "var(--radius)", border: "1px solid var(--border)" }}
         />
-        <button className="btn" type="submit">
+        <button className="btn" type="submit" disabled={!draft.trim()}>
           Send
         </button>
       </form>
