@@ -6,6 +6,7 @@ import { validateObjectIdParams } from "../middleware/validateObjectId";
 import { ChatService } from "../services/chatService";
 import { emitToWorkspace } from "../sockets/index";
 import { mentionQueue } from "../jobs/queues";
+import { parseIntParam } from "../lib/pagination";
 
 export const chatRoutes = Router({ mergeParams: true });
 
@@ -87,8 +88,12 @@ chatRoutes.get(
   "/:channelId/messages",
   validateObjectIdParams("channelId"),
   async (req: WorkspaceScopedRequest, res) => {
-    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const limit = parseIntParam(req.query.limit, { default: 25, min: 1, max: 100 });
+    if (limit === null) return res.status(400).json({ error: "Invalid limit" });
     const before = typeof req.query.before === "string" ? req.query.before : undefined;
+    if (before && !/^[a-f0-9]{24}$/i.test(before)) {
+      return res.status(400).json({ error: "Invalid before cursor" });
+    }
     const page = await ChatService.listMessages(req.params.workspaceId, req.params.channelId, {
       limit,
       before,

@@ -33,4 +33,25 @@ describe("GET /workspaces/:workspaceId/activity", () => {
     expect(res.body).toHaveLength(1);
     expect(res.body[0].type).toBe("page");
   });
+
+  it("rejects a non-numeric limit instead of crashing", async () => {
+    const reg = await request(app)
+      .post("/auth/register")
+      .send({ email: "activity-badlimit@x.com", password: "password123", name: "A" });
+    const token = reg.body.accessToken as string;
+    const ws = await request(app)
+      .post("/workspaces")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "WS" });
+
+    await request(app)
+      .get(`/workspaces/${ws.body._id}/activity?limit=abc`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(400);
+
+    await request(app)
+      .get(`/workspaces/${ws.body._id}/activity?limit=101`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(400);
+  });
 });

@@ -58,4 +58,18 @@ describe("GET /workspaces/:workspaceId/audit-log", () => {
       .set("Authorization", `Bearer ${memberReg.body.accessToken}`)
       .expect(403);
   });
+
+  it("rejects a non-numeric or non-positive page instead of crashing", async () => {
+    const { token, workspaceId } = await setupWorkspace();
+
+    await request(app)
+      .get(`/workspaces/${workspaceId}/audit-log?page=abc`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(400);
+
+    await request(app)
+      .get(`/workspaces/${workspaceId}/audit-log?page=0`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(400);
+  });
 });

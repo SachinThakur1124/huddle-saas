@@ -39,6 +39,31 @@ describe("chat routes", () => {
     expect(list.body.messages).toHaveLength(1);
   });
 
+  it("rejects an invalid limit or before cursor instead of crashing", async () => {
+    const reg = await request(app)
+      .post("/auth/register")
+      .send({ email: "c-badquery@x.com", password: "password123", name: "C" });
+    const token = reg.body.accessToken as string;
+    const ws = await request(app)
+      .post("/workspaces")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "WS" });
+    const channel = await request(app)
+      .post(`/workspaces/${ws.body._id}/channels`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "general" });
+
+    await request(app)
+      .get(`/workspaces/${ws.body._id}/channels/${channel.body._id}/messages?limit=not-a-number`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(400);
+
+    await request(app)
+      .get(`/workspaces/${ws.body._id}/channels/${channel.body._id}/messages?before=not-an-id`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(400);
+  });
+
   it("rejects a member of workspace A reading/posting to workspace B's channel via A's URL (IDOR)", async () => {
     const regA = await request(app)
       .post("/auth/register")
