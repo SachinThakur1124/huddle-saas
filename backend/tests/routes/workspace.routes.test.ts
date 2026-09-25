@@ -122,4 +122,87 @@ describe("workspace routes", () => {
       .send({ userId: viewer.userId, role: "member" })
       .expect(200);
   });
+
+  it("lists a workspace's members with their name/email/role", async () => {
+    const owner = await registerAndGetId("owner6@x.com");
+    const ws = await request(app)
+      .post("/workspaces")
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({ name: "Co6" });
+
+    const member = await registerAndGetId("member6@x.com");
+    await request(app)
+      .post(`/workspaces/${ws.body._id}/members`)
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({ userId: member.userId, role: "member" })
+      .expect(200);
+
+    const res = await request(app)
+      .get(`/workspaces/${ws.body._id}/members`)
+      .set("Authorization", `Bearer ${owner.token}`)
+      .expect(200);
+
+    expect(res.body).toHaveLength(2);
+    const roles = res.body.map((m: { role: string; email: string }) => m.role).sort();
+    expect(roles).toEqual(["member", "owner"]);
+    expect(res.body.every((m: { email: string }) => typeof m.email === "string")).toBe(true);
+  });
+
+  it("removes a member from the workspace, but never the last owner", async () => {
+    const owner = await registerAndGetId("owner7@x.com");
+    const ws = await request(app)
+      .post("/workspaces")
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({ name: "Co7" });
+
+    const member = await registerAndGetId("member7@x.com");
+    await request(app)
+      .post(`/workspaces/${ws.body._id}/members`)
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({ userId: member.userId, role: "member" })
+      .expect(200);
+
+    await request(app)
+      .delete(`/workspaces/${ws.body._id}/members/${member.userId}`)
+      .set("Authorization", `Bearer ${owner.token}`)
+      .expect(204);
+
+    const membersAfter = await request(app)
+      .get(`/workspaces/${ws.body._id}/members`)
+      .set("Authorization", `Bearer ${owner.token}`)
+      .expect(200);
+    expect(membersAfter.body).toHaveLength(1);
+
+    await request(app)
+      .delete(`/workspaces/${ws.body._id}/members/${owner.userId}`)
+      .set("Authorization", `Bearer ${owner.token}`)
+      .expect(400); // can't remove the last owner
+  });
+
+  it("denies a member from removing an admin (equal-or-higher rank)", async () => {
+    const owner = await registerAndGetId("owner8@x.com");
+    const ws = await request(app)
+      .post("/workspaces")
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({ name: "Co8" });
+
+    const admin = await registerAndGetId("admin8@x.com");
+    await request(app)
+      .post(`/workspaces/${ws.body._id}/members`)
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({ userId: admin.userId, role: "admin" })
+      .expect(200);
+
+    const member = await registerAndGetId("member8@x.com");
+    await request(app)
+      .post(`/workspaces/${ws.body._id}/members`)
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({ userId: member.userId, role: "member" })
+      .expect(200);
+
+    await request(app)
+      .delete(`/workspaces/${ws.body._id}/members/${admin.userId}`)
+      .set("Authorization", `Bearer ${member.token}`)
+      .expect(403); // requireRole("admin") already blocks a plain member
+  });
 });

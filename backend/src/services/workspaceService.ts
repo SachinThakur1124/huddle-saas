@@ -27,6 +27,23 @@ export const WorkspaceService = {
     return memberships.map((m) => m.workspaceId);
   },
 
+  async listMembers(workspaceId: string) {
+    const memberships = await Membership.find({ workspaceId })
+      .populate("userId", "name email")
+      .sort({ createdAt: 1 });
+    return memberships
+      .filter((m) => m.userId) // drop rows whose user was hard-deleted, if that ever happens
+      .map((m) => {
+        const user = m.userId as unknown as { _id: unknown; name: string; email: string };
+        return {
+          userId: user._id,
+          name: user.name,
+          email: user.email,
+          role: m.role,
+        };
+      });
+  },
+
   async setRole(
     workspaceId: string,
     actorId: string,
@@ -73,6 +90,41 @@ export const WorkspaceService = {
       });
       await invalidateMembershipCache(targetUserId, workspaceId);
       return membership;
+    });
+  },
+
+  async removeMember(
+    workspaceId: string,
+    actorId: string,
+    actorRole: Role,
+    targetUserId: string,
+  ) {
+    const existing = await Membership.findOne({ userId: targetUserId, workspaceId });
+    if (!existing) throw new HttpError(404, "Membership not found");
+
+    // Same rule as setRole: nobody may act on a member who outranks or
+    // matches them, unless the actor is an owner.
+    if (rank(existing.role) >= rank(actorRole) && actorRole !== "owner") {
+      throw new HttpError(403, "Cannot remove a member with an equal or higher role");
+    }
+    if (existing.role === "owner") {
+      const ownerCount = await Membership.countDocuments({ workspaceId, role: "owner" });
+      if (ownerCount <= 1) {
+        throw new HttpError(400, "Cannot remove the last owner of a workspace");
+      }
+    }
+
+    return withTransaction(async (session) => {
+      await Membership.deleteOne({ _id: existing._id }, { session });
+      await AuditService.record({
+        actorId,
+        workspaceId,
+        action: "membership.removed",
+        targetType: "Membership",
+        targetId: existing._id,
+        session,
+      });
+      await invalidateMembershipCache(targetUserId, workspaceId);
     });
   },
 };

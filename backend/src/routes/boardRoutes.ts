@@ -78,6 +78,52 @@ boardRoutes.get(
   },
 );
 
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/boards/{boardId}:
+ *   delete:
+ *     summary: Delete a board and cascade-delete its lists and cards (admin+ only)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *       - { name: boardId, in: path, required: true, schema: { type: string } }
+ *     responses:
+ *       204: { description: Deleted }
+ *       404: { description: Board not found (or belongs to another workspace) }
+ */
+boardRoutes.delete(
+  "/:boardId",
+  validateObjectIdParams("boardId"),
+  requireRole("admin"),
+  async (req: WorkspaceScopedRequest, res) => {
+    await BoardService.deleteBoard(req.params.workspaceId, req.userId!, req.params.boardId);
+    emitToWorkspace(req.params.workspaceId, "board:deleted", { boardId: req.params.boardId });
+    res.status(204).send();
+  },
+);
+
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/boards/{boardId}/lists:
+ *   post:
+ *     summary: Create a list on a board
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *       - { name: boardId, in: path, required: true, schema: { type: string } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title]
+ *             properties:
+ *               title: { type: string }
+ *     responses:
+ *       201: { description: List created }
+ *       404: { description: Board not found }
+ */
 boardRoutes.post(
   "/:boardId/lists",
   validateObjectIdParams("boardId"),
@@ -94,6 +140,59 @@ boardRoutes.post(
   },
 );
 
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/boards/{boardId}/lists/{listId}:
+ *   delete:
+ *     summary: Delete a list and cascade-delete its cards, closing the position gap left in the board's remaining lists
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *       - { name: boardId, in: path, required: true, schema: { type: string } }
+ *       - { name: listId, in: path, required: true, schema: { type: string } }
+ *     responses:
+ *       204: { description: Deleted }
+ *       404: { description: List not found (or belongs to a different board/workspace) }
+ */
+boardRoutes.delete(
+  "/:boardId/lists/:listId",
+  validateObjectIdParams("boardId", "listId"),
+  requireRole("member"),
+  async (req: WorkspaceScopedRequest, res) => {
+    await BoardService.deleteList(
+      req.params.workspaceId,
+      req.userId!,
+      req.params.boardId,
+      req.params.listId,
+    );
+    emitToWorkspace(req.params.workspaceId, "list:deleted", { listId: req.params.listId });
+    res.status(204).send();
+  },
+);
+
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/boards/{boardId}/lists/{listId}/cards:
+ *   post:
+ *     summary: Create a card at the end of a list
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *       - { name: boardId, in: path, required: true, schema: { type: string } }
+ *       - { name: listId, in: path, required: true, schema: { type: string } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title]
+ *             properties:
+ *               title: { type: string }
+ *     responses:
+ *       201: { description: Card created }
+ *       404: { description: List not found }
+ */
 boardRoutes.post(
   "/:boardId/lists/:listId/cards",
   validateObjectIdParams("boardId", "listId"),
@@ -116,6 +215,29 @@ const moveSchema = z.object({
   toPosition: z.number().int().min(0),
 });
 
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/boards/cards/{cardId}/move:
+ *   post:
+ *     summary: Move a card to a (possibly different) list and position, keeping positions dense in both lists (broadcasts card:moved over Socket.io)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *       - { name: cardId, in: path, required: true, schema: { type: string } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [toListId, toPosition]
+ *             properties:
+ *               toListId: { type: string }
+ *               toPosition: { type: integer, minimum: 0 }
+ *     responses:
+ *       200: { description: "{ ok: true }" }
+ *       404: { description: Card or target list not found }
+ */
 boardRoutes.post(
   "/cards/:cardId/move",
   validateObjectIdParams("cardId"),
@@ -142,6 +264,42 @@ boardRoutes.post(
   },
 );
 
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/boards/cards/{cardId}:
+ *   delete:
+ *     summary: Delete a card, closing the position gap left in its list
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *       - { name: cardId, in: path, required: true, schema: { type: string } }
+ *     responses:
+ *       204: { description: Deleted }
+ *       404: { description: Card not found (or belongs to another workspace) }
+ */
+boardRoutes.delete(
+  "/cards/:cardId",
+  validateObjectIdParams("cardId"),
+  requireRole("member"),
+  async (req: WorkspaceScopedRequest, res) => {
+    await BoardService.deleteCard(req.params.workspaceId, req.userId!, req.params.cardId);
+    emitToWorkspace(req.params.workspaceId, "card:deleted", { cardId: req.params.cardId });
+    res.status(204).send();
+  },
+);
+
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/boards/{boardId}/stats:
+ *   get:
+ *     summary: Card counts per list on a board (Mongo aggregation)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *       - { name: boardId, in: path, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: "Array of { listId, count }" }
+ */
 boardRoutes.get(
   "/:boardId/stats",
   validateObjectIdParams("boardId"),

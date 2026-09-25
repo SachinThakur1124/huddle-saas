@@ -26,6 +26,27 @@ const upload = multer({
 
 uploadRoutes.use(requireAuth, requireRole("member"));
 
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/uploads:
+ *   post:
+ *     summary: Upload a file (png/jpeg/gif/pdf, 5MB max) as a workspace attachment
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file: { type: string, format: binary }
+ *     responses:
+ *       201: { description: "{ id, url, mimeType, size } — url is an authenticated download route, not a public path" }
+ *       400: { description: Unsupported file type, oversized, or missing file }
+ */
 uploadRoutes.post("/", (req: WorkspaceScopedRequest, res) => {
   upload.single("file")(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
@@ -52,6 +73,19 @@ uploadRoutes.post("/", (req: WorkspaceScopedRequest, res) => {
   });
 });
 
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/uploads/{attachmentId}:
+ *   get:
+ *     summary: Download an attachment (requires auth + membership in the workspace it belongs to)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *       - { name: attachmentId, in: path, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: File contents }
+ *       404: { description: Attachment not found (or belongs to another workspace) }
+ */
 uploadRoutes.get(
   "/:attachmentId",
   validateObjectIdParams("attachmentId"),

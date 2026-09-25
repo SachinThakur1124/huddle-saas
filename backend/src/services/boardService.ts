@@ -152,6 +152,80 @@ export const BoardService = {
     });
   },
 
+  async deleteBoard(workspaceId: string, actorId: string, boardId: string) {
+    return withTransaction(async (session) => {
+      const board = await Board.findOne({ _id: boardId, workspaceId }).session(session);
+      if (!board) throw new HttpError(404, "Board not found");
+
+      const lists = await List.find({ boardId, workspaceId }, { _id: 1 }).session(session);
+      const listIds = lists.map((l) => l._id);
+      await Card.deleteMany({ listId: { $in: listIds } }, { session });
+      await List.deleteMany({ boardId, workspaceId }, { session });
+      await Board.deleteOne({ _id: boardId }, { session });
+
+      await AuditService.record({
+        actorId,
+        workspaceId,
+        action: "board.deleted",
+        targetType: "Board",
+        targetId: board._id,
+        session,
+      });
+    });
+  },
+
+  /** Deletes a list and its cards, then closes the position gap left in
+   * the board's remaining lists so they stay dense (0..n-1) — the same
+   * invariant `moveCard` relies on for the drag-and-drop position math. */
+  async deleteList(workspaceId: string, actorId: string, boardId: string, listId: string) {
+    return withTransaction(async (session) => {
+      const list = await List.findOne({ _id: listId, boardId, workspaceId }).session(session);
+      if (!list) throw new HttpError(404, "List not found");
+
+      await Card.deleteMany({ listId }, { session });
+      await List.deleteOne({ _id: listId }, { session });
+      await List.updateMany(
+        { boardId, workspaceId, position: { $gt: list.position } },
+        { $inc: { position: -1 } },
+        { session },
+      );
+
+      await AuditService.record({
+        actorId,
+        workspaceId,
+        action: "list.deleted",
+        targetType: "List",
+        targetId: list._id,
+        session,
+      });
+    });
+  },
+
+  /** Deletes a card, then closes the position gap left in its list so the
+   * remaining cards stay dense — same invariant as `moveCard`. */
+  async deleteCard(workspaceId: string, actorId: string, cardId: string) {
+    return withTransaction(async (session) => {
+      const card = await Card.findOne({ _id: cardId, workspaceId }).session(session);
+      if (!card) throw new HttpError(404, "Card not found");
+
+      await Card.deleteOne({ _id: cardId }, { session });
+      await Card.updateMany(
+        { listId: card.listId, position: { $gt: card.position } },
+        { $inc: { position: -1 } },
+        { session },
+      );
+
+      await AuditService.record({
+        actorId,
+        workspaceId,
+        action: "card.deleted",
+        targetType: "Card",
+        targetId: card._id,
+        session,
+      });
+    });
+  },
+
   async getStats(workspaceId: string, boardId: string) {
     const lists = await List.find({ boardId, workspaceId }, { _id: 1 });
     const listIds = lists.map((l) => l._id);

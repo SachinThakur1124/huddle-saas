@@ -14,6 +14,33 @@ chatRoutes.use(requireAuth, requireRole("viewer"));
 
 const createChannelSchema = z.object({ name: z.string().min(1).max(80) });
 
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/channels:
+ *   get:
+ *     summary: List channels in a workspace
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: Array of channels }
+ *   post:
+ *     summary: Create a channel
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string, maxLength: 80 }
+ *     responses:
+ *       201: { description: Channel created }
+ */
 chatRoutes.get("/", async (req: WorkspaceScopedRequest, res) => {
   const channels = await ChatService.listChannels(req.params.workspaceId);
   res.json(channels);
@@ -25,6 +52,30 @@ chatRoutes.post("/", requireRole("member"), async (req: WorkspaceScopedRequest, 
   const channel = await ChatService.createChannel(req.params.workspaceId, parsed.data.name);
   res.status(201).json(channel);
 });
+
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/channels/{channelId}:
+ *   delete:
+ *     summary: Delete a channel and cascade-delete its messages (admin+ only)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: workspaceId, in: path, required: true, schema: { type: string } }
+ *       - { name: channelId, in: path, required: true, schema: { type: string } }
+ *     responses:
+ *       204: { description: Deleted }
+ *       404: { description: Channel not found (or belongs to another workspace) }
+ */
+chatRoutes.delete(
+  "/:channelId",
+  validateObjectIdParams("channelId"),
+  requireRole("admin"),
+  async (req: WorkspaceScopedRequest, res) => {
+    await ChatService.deleteChannel(req.params.workspaceId, req.userId!, req.params.channelId);
+    emitToWorkspace(req.params.workspaceId, "channel:deleted", { channelId: req.params.channelId });
+    res.status(204).send();
+  },
+);
 
 const messageSchema = z.object({ body: z.string().min(1).max(4000) });
 

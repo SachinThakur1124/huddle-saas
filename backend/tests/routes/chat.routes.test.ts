@@ -64,6 +64,48 @@ describe("chat routes", () => {
       .expect(400);
   });
 
+  it("deletes a channel and cascade-deletes its messages (admin+ only)", async () => {
+    const reg = await request(app)
+      .post("/auth/register")
+      .send({ email: "delchannel@x.com", password: "password123", name: "D" });
+    const token = reg.body.accessToken as string;
+    const ws = await request(app)
+      .post("/workspaces")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "WS" });
+    const channel = await request(app)
+      .post(`/workspaces/${ws.body._id}/channels`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "general" });
+    await request(app)
+      .post(`/workspaces/${ws.body._id}/channels/${channel.body._id}/messages`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ body: "hello" });
+
+    const member = await request(app)
+      .post("/auth/register")
+      .send({ email: "delchannel-member@x.com", password: "password123", name: "M" });
+    await request(app)
+      .post(`/workspaces/${ws.body._id}/members`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ userId: member.body.user.id, role: "member" });
+
+    await request(app)
+      .delete(`/workspaces/${ws.body._id}/channels/${channel.body._id}`)
+      .set("Authorization", `Bearer ${member.body.accessToken}`)
+      .expect(403);
+
+    await request(app)
+      .delete(`/workspaces/${ws.body._id}/channels/${channel.body._id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(204);
+
+    await request(app)
+      .get(`/workspaces/${ws.body._id}/channels/${channel.body._id}/messages`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(404); // channel itself is gone, not just emptied
+  });
+
   it("rejects a member of workspace A reading/posting to workspace B's channel via A's URL (IDOR)", async () => {
     const regA = await request(app)
       .post("/auth/register")

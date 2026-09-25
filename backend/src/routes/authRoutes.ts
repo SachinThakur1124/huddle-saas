@@ -122,6 +122,23 @@ authRoutes.post("/refresh", async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /auth/logout:
+ *   post:
+ *     summary: Revoke a refresh token (best-effort — always returns 204 even if the token was already invalid)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [refreshToken]
+ *             properties:
+ *               refreshToken: { type: string }
+ *     responses:
+ *       204: { description: Logged out }
+ */
 authRoutes.post("/logout", async (req, res) => {
   const parsed = refreshSchema.safeParse(req.body);
   if (parsed.success) {
@@ -130,6 +147,16 @@ authRoutes.post("/logout", async (req, res) => {
   res.status(204).send();
 });
 
+/**
+ * @openapi
+ * /auth/me:
+ *   get:
+ *     summary: Get the current authenticated user
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ id, email, name }" }
+ *       404: { description: User not found }
+ */
 authRoutes.get("/me", requireAuth, async (req: AuthedRequest, res) => {
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: "User not found" });
