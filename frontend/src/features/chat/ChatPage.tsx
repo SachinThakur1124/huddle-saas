@@ -3,11 +3,8 @@ import { useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useListMessagesQuery, useSendMessageMutation } from "./chatApi";
 import { selectCurrentUser } from "../auth/authSlice";
-import { enqueue } from "../../app/offlineQueue";
-
-function isNetworkError(err: unknown): boolean {
-  return typeof err === "object" && err !== null && "status" in err && err.status === "FETCH_ERROR";
-}
+import { enqueue, newActionId } from "../../app/offlineQueue";
+import { isNetworkError } from "../../app/errors";
 
 // Keyed by channelId at the call site below, so switching channels remounts
 // this component fresh — pagination (`before`) and the one-time initial
@@ -59,7 +56,7 @@ function ChatChannelView({ workspaceId, channelId }: { workspaceId: string; chan
         // Offline: queue it in IndexedDB rather than losing the draft —
         // flushed automatically on the browser's `online` event (see
         // main.tsx).
-        await enqueue({ id: `${Date.now()}-${Math.random()}`, workspaceId, channelId, body });
+        await enqueue({ id: newActionId(), kind: "message", workspaceId, channelId, body });
         return;
       }
       setDraft(body); // give the text back so it isn't silently lost

@@ -1,47 +1,63 @@
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useNavigate, useParams } from "react-router-dom";
 import { useListPagesQuery, useCreatePageMutation } from "./pagesApi";
-import { getErrorMessage } from "../../app/errors";
+import { getErrorMessage, isNetworkError } from "../../app/errors";
+import { enqueue, newActionId } from "../../app/offlineQueue";
 
 const TITLE_MAX = 200;
+const schema = z.object({
+  title: z.string().trim().min(1, "Title is required").max(TITLE_MAX, `Keep it under ${TITLE_MAX} characters`),
+});
+type FormValues = z.infer<typeof schema>;
 
 export function PagesListPage() {
   const { workspaceId = "" } = useParams();
   const { data: pages = [], isLoading } = useListPagesQuery({ workspaceId });
   const [createPage, { isLoading: isCreating }] = useCreatePageMutation();
-  const [title, setTitle] = useState("");
-  const [error, setError] = useState("");
+  const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const navigate = useNavigate();
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!title.trim()) return;
-    setError("");
+  async function handleCreate(values: FormValues) {
+    setNotice(null);
     try {
-      const page = await createPage({ workspaceId, title: title.trim() }).unwrap();
-      setTitle("");
+      const page = await createPage({ workspaceId, title: values.title }).unwrap();
+      reset();
       navigate(`/workspaces/${workspaceId}/pages/${page._id}`);
     } catch (err) {
-      setError(getErrorMessage(err, "Couldn't create the page. Check your permissions and try again."));
+      if (isNetworkError(err)) {
+        await enqueue({ id: newActionId(), kind: "page", workspaceId, title: values.title });
+        reset();
+        setNotice({ kind: "success", text: "You're offline — this page will be created once you're back online." });
+        return;
+      }
+      setNotice({ kind: "error", text: getErrorMessage(err, "Couldn't create the page. Check your permissions and try again.") });
     }
   }
 
   return (
     <div>
       <h1>Pages</h1>
-      <form className="inline-form" onSubmit={handleCreate}>
-        <input
-          aria-label="New page title"
-          placeholder="Untitled page"
-          value={title}
-          maxLength={TITLE_MAX}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <button className="btn" type="submit" disabled={isCreating || !title.trim()}>
+      <form className="inline-form" onSubmit={handleSubmit(handleCreate)} noValidate>
+        <div style={{ flex: 1 }}>
+          <input aria-label="New page title" placeholder="Untitled page" maxLength={TITLE_MAX} {...register("title")} />
+          {errors.title && <p className="field-error" style={{ marginTop: 4 }}>{errors.title.message}</p>}
+        </div>
+        <button className="btn" type="submit" disabled={isCreating}>
           {isCreating ? <span className="spinner" /> : "+ New page"}
         </button>
       </form>
-      {error && <div className="alert alert-error">{error}</div>}
+      {notice && (
+        <div className={notice.kind === "error" ? "alert alert-error" : "alert alert-success"}>{notice.text}</div>
+      )}
       {isLoading && (
         <div className="loading-row">
           <span className="spinner" /> Loading pages...

@@ -7,6 +7,10 @@ function isZodFlatError(value: unknown): value is ZodFlatError {
   return typeof value === "object" && value !== null && ("fieldErrors" in value || "formErrors" in value);
 }
 
+export function isNetworkError(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "status" in err && (err as { status: unknown }).status === "FETCH_ERROR";
+}
+
 /**
  * Surfaces the backend's actual validation message instead of a generic
  * "something went wrong" — the API returns either a plain string (409/401
@@ -28,7 +32,7 @@ export function getErrorMessage(err: unknown, fallback: string): string {
       }
     }
   }
-  if (typeof err === "object" && err !== null && "status" in err && (err as { status: unknown }).status === "FETCH_ERROR") {
+  if (isNetworkError(err)) {
     return "Can't reach the server. Check your connection and try again.";
   }
   return fallback;

@@ -34,8 +34,10 @@ rather than an httpOnly cookie (see the backend's Known Limitations).
 
 ## Known limitations
 - Offline support is an app-shell cache (via `vite-plugin-pwa`) plus an
-  IndexedDB queue for outbound chat messages sent while offline — not a
-  full offline-first data sync.
+  IndexedDB queue covering chat messages and page/board/card/channel
+  creation while offline, replayed in queued order on the `online` event
+  — not a full offline-first data sync (edits to existing content, board
+  moves, etc. still require a live connection).
 - Page content is a plain text field, not a rich block editor.
 - `react-router-dom`'s current release line has an open npm-audit advisory
   (open-redirect via a backslash in `<Link>`/`useNavigate` targets) with no

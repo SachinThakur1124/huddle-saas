@@ -2,6 +2,7 @@ import { Page } from "../models/Page";
 import { withTransaction } from "../lib/withTransaction";
 import { AuditService } from "./auditService";
 import { HttpError } from "../lib/httpError";
+import { searchReindexQueue } from "../jobs/queues";
 
 interface CreateInput {
   title: string;
@@ -58,11 +59,7 @@ export const PageService = {
         cursor = parent.parentId ? parent.parentId.toString() : null;
       }
     }
-    const page = await Page.findOneAndUpdate(
-      { _id: pageId, workspaceId },
-      { ...patch, updatedAt: new Date() },
-      { new: true },
-    );
+    const page = await Page.findOneAndUpdate({ _id: pageId, workspaceId }, patch, { new: true });
     if (page) {
       await AuditService.record({
         actorId,
@@ -70,6 +67,14 @@ export const PageService = {
         action: "page.updated",
         targetType: "Page",
         targetId: page._id,
+      });
+      // Bumping `updatedAt` is offloaded to the reindex worker rather than
+      // done inline here, so a burst of rapid edits (e.g. autosave on every
+      // keystroke) doesn't add a synchronous write to the request path for
+      // every one of them — the queue absorbs the burst instead.
+      await searchReindexQueue.add("reindex", {
+        entityType: "page",
+        entityId: page._id.toString(),
       });
     }
     return page;

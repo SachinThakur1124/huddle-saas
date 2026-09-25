@@ -21,7 +21,8 @@ import {
   useMoveCardMutation,
   Card as CardType,
 } from "./boardsApi";
-import { getErrorMessage } from "../../app/errors";
+import { getErrorMessage, isNetworkError } from "../../app/errors";
+import { enqueue, newActionId } from "../../app/offlineQueue";
 
 const TITLE_MAX = 100;
 
@@ -152,7 +153,7 @@ export function BoardPage() {
   const [createCard] = useCreateCardMutation();
   const [moveCard] = useMoveCardMutation();
   const [newListTitle, setNewListTitle] = useState("");
-  const [listError, setListError] = useState("");
+  const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   if (isLoading) {
@@ -198,7 +199,12 @@ export function BoardPage() {
     try {
       await createCard({ workspaceId, boardId, listId, title }).unwrap();
       return true;
-    } catch {
+    } catch (err) {
+      if (isNetworkError(err)) {
+        await enqueue({ id: newActionId(), kind: "card", workspaceId, boardId, listId, title });
+        setNotice({ kind: "success", text: "You're offline — this card will be added once you're back online." });
+        return true; // closes the inline form; the card appears after the queue flushes
+      }
       return false;
     }
   }
@@ -206,19 +212,21 @@ export function BoardPage() {
   async function handleAddList(e: React.FormEvent) {
     e.preventDefault();
     if (!newListTitle.trim()) return;
-    setListError("");
+    setNotice(null);
     try {
       await createList({ workspaceId, boardId, title: newListTitle.trim() }).unwrap();
       setNewListTitle("");
     } catch (err) {
-      setListError(getErrorMessage(err, "Couldn't create the list. Check your permissions and try again."));
+      setNotice({ kind: "error", text: getErrorMessage(err, "Couldn't create the list. Check your permissions and try again.") });
     }
   }
 
   return (
     <div>
       <h1>{data.board.title}</h1>
-      {listError && <div className="alert alert-error">{listError}</div>}
+      {notice && (
+        <div className={notice.kind === "error" ? "alert alert-error" : "alert alert-success"}>{notice.text}</div>
+      )}
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <div className="board-track">
           {lists

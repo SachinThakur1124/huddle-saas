@@ -1,47 +1,63 @@
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useNavigate, useParams } from "react-router-dom";
 import { useListChannelsQuery, useCreateChannelMutation } from "./chatApi";
-import { getErrorMessage } from "../../app/errors";
+import { getErrorMessage, isNetworkError } from "../../app/errors";
+import { enqueue, newActionId } from "../../app/offlineQueue";
 
 const NAME_MAX = 80;
+const schema = z.object({
+  name: z.string().trim().min(1, "Channel name is required").max(NAME_MAX, `Keep it under ${NAME_MAX} characters`),
+});
+type FormValues = z.infer<typeof schema>;
 
 export function ChatChannelListPage() {
   const { workspaceId = "" } = useParams();
   const { data: channels = [], isLoading } = useListChannelsQuery({ workspaceId });
   const [createChannel, { isLoading: isCreating }] = useCreateChannelMutation();
-  const [name, setName] = useState("");
-  const [error, setError] = useState("");
+  const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const navigate = useNavigate();
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setError("");
+  async function handleCreate(values: FormValues) {
+    setNotice(null);
     try {
-      const channel = await createChannel({ workspaceId, name: name.trim() }).unwrap();
-      setName("");
+      const channel = await createChannel({ workspaceId, name: values.name }).unwrap();
+      reset();
       navigate(`/workspaces/${workspaceId}/chat/${channel._id}`);
     } catch (err) {
-      setError(getErrorMessage(err, "Couldn't create the channel. Check your permissions and try again."));
+      if (isNetworkError(err)) {
+        await enqueue({ id: newActionId(), kind: "channel", workspaceId, name: values.name });
+        reset();
+        setNotice({ kind: "success", text: "You're offline — this channel will be created once you're back online." });
+        return;
+      }
+      setNotice({ kind: "error", text: getErrorMessage(err, "Couldn't create the channel. Check your permissions and try again.") });
     }
   }
 
   return (
     <div>
       <h1>Channels</h1>
-      <form className="inline-form" onSubmit={handleCreate}>
-        <input
-          aria-label="New channel name"
-          placeholder="general"
-          value={name}
-          maxLength={NAME_MAX}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <button className="btn" type="submit" disabled={isCreating || !name.trim()}>
+      <form className="inline-form" onSubmit={handleSubmit(handleCreate)} noValidate>
+        <div style={{ flex: 1 }}>
+          <input aria-label="New channel name" placeholder="general" maxLength={NAME_MAX} {...register("name")} />
+          {errors.name && <p className="field-error" style={{ marginTop: 4 }}>{errors.name.message}</p>}
+        </div>
+        <button className="btn" type="submit" disabled={isCreating}>
           {isCreating ? <span className="spinner" /> : "+ New channel"}
         </button>
       </form>
-      {error && <div className="alert alert-error">{error}</div>}
+      {notice && (
+        <div className={notice.kind === "error" ? "alert alert-error" : "alert alert-success"}>{notice.text}</div>
+      )}
       {isLoading && (
         <div className="loading-row">
           <span className="spinner" /> Loading channels...

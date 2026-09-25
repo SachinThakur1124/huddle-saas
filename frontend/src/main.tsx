@@ -8,7 +8,9 @@ import { setCredentials, clearCredentials, selectAccessToken } from "./features/
 import { authApi } from "./features/auth/authApi";
 import { connectSocket, disconnectSocket } from "./features/chat/socket";
 import { chatApi } from "./features/chat/chatApi";
-import { flushQueue } from "./app/offlineQueue";
+import { pagesApi } from "./features/pages/pagesApi";
+import { boardsApi } from "./features/boards/boardsApi";
+import { flushQueue, QueuedAction } from "./app/offlineQueue";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { App } from "./App";
 import "./index.css";
@@ -75,15 +77,31 @@ function AuthAndSocketLifecycle() {
 
   useEffect(() => {
     function handleOnline() {
-      flushQueue((message) =>
-        dispatch(
-          chatApi.endpoints.sendMessage.initiate({
-            workspaceId: message.workspaceId,
-            channelId: message.channelId,
-            body: message.body,
-          }),
-        ).unwrap().then(() => {}),
-      ).catch(() => {
+      flushQueue({
+        message: (a: Extract<QueuedAction, { kind: "message" }>) =>
+          dispatch(
+            chatApi.endpoints.sendMessage.initiate({
+              workspaceId: a.workspaceId,
+              channelId: a.channelId,
+              body: a.body,
+            }),
+          ).unwrap(),
+        page: (a: Extract<QueuedAction, { kind: "page" }>) =>
+          dispatch(pagesApi.endpoints.createPage.initiate({ workspaceId: a.workspaceId, title: a.title })).unwrap(),
+        board: (a: Extract<QueuedAction, { kind: "board" }>) =>
+          dispatch(boardsApi.endpoints.createBoard.initiate({ workspaceId: a.workspaceId, title: a.title })).unwrap(),
+        channel: (a: Extract<QueuedAction, { kind: "channel" }>) =>
+          dispatch(chatApi.endpoints.createChannel.initiate({ workspaceId: a.workspaceId, name: a.name })).unwrap(),
+        card: (a: Extract<QueuedAction, { kind: "card" }>) =>
+          dispatch(
+            boardsApi.endpoints.createCard.initiate({
+              workspaceId: a.workspaceId,
+              boardId: a.boardId,
+              listId: a.listId,
+              title: a.title,
+            }),
+          ).unwrap(),
+      }).catch(() => {
         // best-effort: whatever's left stays queued for the next `online` event
       });
     }

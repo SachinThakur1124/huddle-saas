@@ -1,24 +1,34 @@
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useNavigate } from "react-router-dom";
 import { useListWorkspacesQuery, useCreateWorkspaceMutation } from "./workspacesApi";
 import { getErrorMessage } from "../../app/errors";
 
 const NAME_MAX = 100;
+const schema = z.object({
+  name: z.string().trim().min(1, "Workspace name is required").max(NAME_MAX, `Keep it under ${NAME_MAX} characters`),
+});
+type FormValues = z.infer<typeof schema>;
 
 export function WorkspaceListPage() {
   const { data: workspaces = [], isLoading } = useListWorkspacesQuery();
   const [createWorkspace, { isLoading: isCreating }] = useCreateWorkspaceMutation();
-  const [name, setName] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return;
+  async function handleCreate(values: FormValues) {
     setError("");
     try {
-      const workspace = await createWorkspace({ name: name.trim() }).unwrap();
-      setName("");
+      const workspace = await createWorkspace({ name: values.name }).unwrap();
+      reset();
       navigate(`/workspaces/${workspace._id}/pages`);
     } catch (err) {
       setError(getErrorMessage(err, "Couldn't create the workspace. Try again."));
@@ -65,19 +75,19 @@ export function WorkspaceListPage() {
             </li>
           ))}
         </ul>
-        <form onSubmit={handleCreate} style={{ marginTop: "1.2rem" }}>
+        <form onSubmit={handleSubmit(handleCreate)} style={{ marginTop: "1.2rem" }} noValidate>
           <div className="field">
             <label htmlFor="new-workspace-name">New workspace</label>
             <input
               id="new-workspace-name"
-              value={name}
               maxLength={NAME_MAX}
-              onChange={(e) => setName(e.target.value)}
               placeholder="Acme Inc."
+              {...register("name")}
             />
+            {errors.name && <span className="field-error">{errors.name.message}</span>}
           </div>
           {error && <div className="alert alert-error">{error}</div>}
-          <button className="btn" type="submit" disabled={isCreating || !name.trim()} style={{ width: "100%" }}>
+          <button className="btn" type="submit" disabled={isCreating} style={{ width: "100%" }}>
             {isCreating ? <span className="spinner" /> : "Create workspace"}
           </button>
         </form>

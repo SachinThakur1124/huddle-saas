@@ -1,47 +1,63 @@
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useNavigate, useParams } from "react-router-dom";
 import { useListBoardsQuery, useCreateBoardMutation } from "./boardsApi";
-import { getErrorMessage } from "../../app/errors";
+import { getErrorMessage, isNetworkError } from "../../app/errors";
+import { enqueue, newActionId } from "../../app/offlineQueue";
 
 const TITLE_MAX = 100;
+const schema = z.object({
+  title: z.string().trim().min(1, "Title is required").max(TITLE_MAX, `Keep it under ${TITLE_MAX} characters`),
+});
+type FormValues = z.infer<typeof schema>;
 
 export function BoardsListPage() {
   const { workspaceId = "" } = useParams();
   const { data: boards = [], isLoading } = useListBoardsQuery({ workspaceId });
   const [createBoard, { isLoading: isCreating }] = useCreateBoardMutation();
-  const [title, setTitle] = useState("");
-  const [error, setError] = useState("");
+  const [notice, setNotice] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const navigate = useNavigate();
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!title.trim()) return;
-    setError("");
+  async function handleCreate(values: FormValues) {
+    setNotice(null);
     try {
-      const board = await createBoard({ workspaceId, title: title.trim() }).unwrap();
-      setTitle("");
+      const board = await createBoard({ workspaceId, title: values.title }).unwrap();
+      reset();
       navigate(`/workspaces/${workspaceId}/boards/${board._id}`);
     } catch (err) {
-      setError(getErrorMessage(err, "Couldn't create the board. Check your permissions and try again."));
+      if (isNetworkError(err)) {
+        await enqueue({ id: newActionId(), kind: "board", workspaceId, title: values.title });
+        reset();
+        setNotice({ kind: "success", text: "You're offline — this board will be created once you're back online." });
+        return;
+      }
+      setNotice({ kind: "error", text: getErrorMessage(err, "Couldn't create the board. Check your permissions and try again.") });
     }
   }
 
   return (
     <div>
       <h1>Boards</h1>
-      <form className="inline-form" onSubmit={handleCreate}>
-        <input
-          aria-label="New board title"
-          placeholder="Sprint board"
-          value={title}
-          maxLength={TITLE_MAX}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <button className="btn" type="submit" disabled={isCreating || !title.trim()}>
+      <form className="inline-form" onSubmit={handleSubmit(handleCreate)} noValidate>
+        <div style={{ flex: 1 }}>
+          <input aria-label="New board title" placeholder="Sprint board" maxLength={TITLE_MAX} {...register("title")} />
+          {errors.title && <p className="field-error" style={{ marginTop: 4 }}>{errors.title.message}</p>}
+        </div>
+        <button className="btn" type="submit" disabled={isCreating}>
           {isCreating ? <span className="spinner" /> : "+ New board"}
         </button>
       </form>
-      {error && <div className="alert alert-error">{error}</div>}
+      {notice && (
+        <div className={notice.kind === "error" ? "alert alert-error" : "alert alert-success"}>{notice.text}</div>
+      )}
       {isLoading && (
         <div className="loading-row">
           <span className="spinner" /> Loading boards...
